@@ -81,6 +81,8 @@ def create_mock_django_app(
     tmp_path, 
     app_name='myapp', 
     with_models_file=True, 
+    with_views_file=True,
+    with_tests_file=True,
     with_models_folder=False, 
     with_views_folder=False, 
     with_viewsets_folder=False, 
@@ -110,6 +112,16 @@ def create_mock_django_app(
     if with_models_file:
         models_py = app_path / 'models.py'
         models_py.write_text("# models.py file for testing\n")
+
+    # Create views.py if requested
+    if with_views_file:
+        views_py = app_path / 'views.py'
+        views_py.write_text("# views.py file for testing\n")
+
+    # Create tests.py if requested
+    if with_tests_file:
+        tests_py = app_path / 'tests.py'
+        tests_py.write_text("# tests.py file for testing\n")
 
     # Create models folder if requested
     if with_models_folder:
