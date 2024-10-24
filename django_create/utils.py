@@ -24,8 +24,15 @@ def save_rendered_template(content, output_path):
         file.write(content)
 
 def snake_case(name):
-    """Converts CamelCase names to snake_case."""
-    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+    """
+    Converts CamelCase names to snake_case.
+    Handles cases with multiple consecutive uppercase letters correctly.
+    """
+    # Add an underscore between a lowercase and an uppercase letter
+    name = re.sub(r'(?<=[a-z0-9])([A-Z])', r'_\1', name)
+    # Add an underscore before sequences of uppercase letters followed by a lowercase letter
+    name = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
+    return name.lower()
 
 def inject_element_into_file(file_path, element_content):
     """
@@ -69,3 +76,69 @@ def add_import_to_file(init_file_path, element_name, element_file_name):
         with open(init_file_path, 'a') as f:
             f.write(import_statement)
         click.echo(f"Added import to '{init_file_path}': {import_statement.strip()}")
+
+def create_mock_django_app(
+    tmp_path, 
+    app_name='myapp', 
+    with_models_file=True, 
+    with_models_folder=False, 
+    with_views_folder=False, 
+    with_viewsets_folder=False, 
+    with_serializers_folder=False, 
+    with_tests_folder=False
+):
+    """
+    Creates a mock Django app directory structure for testing.
+    
+    Parameters:
+    - tmp_path: A pytest fixture for creating temporary directories.
+    - app_name: The name of the mock Django app.
+    - with_models_file: Whether to include a models.py file in the app.
+    - with_models_folder: Whether to include a models/ folder in the app.
+    - with_views_folder: Whether to include a views/ folder in the app.
+    - with_viewsets_folder: Whether to include a viewsets/ folder in the app.
+    - with_serializers_folder: Whether to include a serializers/ folder in the app.
+    - with_tests_folder: Whether to include a tests/ folder in the app.
+    
+    Returns:
+    - Path to the mock app.
+    """
+    app_path = tmp_path / app_name
+    app_path.mkdir()
+
+    # Create models.py or models/ folder as needed
+    if with_models_file:
+        models_py = app_path / 'models.py'
+        models_py.write_text("# models.py file for testing\n")
+
+    if with_models_folder:
+        models_folder = app_path / 'models'
+        models_folder.mkdir()
+        (models_folder / '__init__.py').write_text("# models/__init__.py for testing\n")
+
+    # Create views/ folder if needed
+    if with_views_folder:
+        views_folder = app_path / 'views'
+        views_folder.mkdir()
+        (views_folder / '__init__.py').write_text("# views/__init__.py for testing\n")
+
+    # Create viewsets/ folder if needed
+    if with_viewsets_folder:
+        viewsets_folder = app_path / 'viewsets'
+        viewsets_folder.mkdir()
+        (viewsets_folder / '__init__.py').write_text("# viewsets/__init__.py for testing\n")
+
+    # Create serializers/ folder if needed
+    if with_serializers_folder:
+        serializers_folder = app_path / 'serializers'
+        serializers_folder.mkdir()
+        (serializers_folder / '__init__.py').write_text("# serializers/__init__.py for testing\n")
+
+    # Create tests/ folder if needed
+    if with_tests_folder:
+        tests_folder = app_path / 'tests'
+        tests_folder.mkdir()
+        (tests_folder / '__init__.py').write_text("# tests/__init__.py for testing\n")
+        (tests_folder / 'test_sample.py').write_text("# Sample test file for testing\n")
+
+    return app_path
