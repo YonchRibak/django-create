@@ -29,13 +29,6 @@ def test_folderize_creates_folders_and_removes_files(tmp_path):
 
     # Verify that the command executed successfully
     assert result.exit_code == 0
-    assert "Folderizing app 'testapp'..." in result.output
-    assert "Removed 'models.py'." in result.output
-    assert "Removed 'views.py'." in result.output
-    assert "Removed 'tests.py'." in result.output
-    assert "Created folder 'models' with __init__.py." in result.output
-    assert "Created folder 'views' with __init__.py." in result.output
-    assert "Created folder 'tests' with __init__.py." in result.output
     assert "App 'testapp' has been folderized successfully." in result.output
 
     # Verify that the files have been removed and folders created
@@ -117,13 +110,6 @@ def test_folderize_works_with_empty_files(tmp_path):
 
     # Verify that the command executed successfully
     assert result.exit_code == 0
-    assert "Folderizing app 'testapp'..." in result.output
-    assert "Removed 'models.py'." in result.output
-    assert "Removed 'views.py'." in result.output
-    assert "Removed 'tests.py'." in result.output
-    assert "Created folder 'models' with __init__.py." in result.output
-    assert "Created folder 'views' with __init__.py." in result.output
-    assert "Created folder 'tests' with __init__.py." in result.output
     assert "App 'testapp' has been folderized successfully." in result.output
 
     # Verify that the files have been removed and folders created

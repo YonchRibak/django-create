@@ -21,7 +21,6 @@ def create_model(ctx, model_name, path):
         django-create myapp create model SomeModel --path products/some_other_folder
     """
     app_name = ctx.obj['app_name']
-    click.echo(f"Creating model '{model_name}' in app '{app_name}'...")
 
     # Use the current working directory as the base path
     base_path = Path(os.getcwd()).resolve()
@@ -45,12 +44,8 @@ def create_model(ctx, model_name, path):
     model_template_path = templates_path / 'model_template.txt'
     model_content = render_template(model_template_path, model_name=model_name)
 
-    # Check for existence of models.py and the models folder
-    click.echo(f"Checking existence of 'models.py': {models_py_path.exists()}")
-    click.echo(f"Checking existence of 'models/' folder: {models_folder_path.exists()}")
-
     if models_py_path.exists() and not models_folder_path.exists():
-        click.echo("Injecting model into 'models.py'...")
+  
         inject_element_into_file(models_py_path, model_content)
     elif models_folder_path.exists() and not models_py_path.exists():
         # Ensure the custom path exists if provided
@@ -58,14 +53,11 @@ def create_model(ctx, model_name, path):
             custom_model_path.mkdir(parents=True, exist_ok=True)
 
         # Create the model file inside the specified or default folder
-        click.echo(f"Creating model file '{model_file_name}' inside the specified path...")
         create_element_file(model_file_path, model_content)
 
         # Add import to __init__.py at the specified path
         add_import_to_file(init_file_path, model_name, model_file_name)
     elif models_py_path.exists() and models_folder_path.exists():
-        click.echo(f"Checking existence of 'models.py': {models_py_path.exists()}")
-        click.echo(f"Checking existence of 'models/' folder: {models_folder_path.exists()}")
         raise click.ClickException(
             "Both 'models.py' and 'models/' folder exist. Please remove one before proceeding."
     )

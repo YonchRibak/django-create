@@ -1,6 +1,6 @@
 import click
-from .commands.create_model import create_model
-from .commands.folderize_app import folderize
+from .commands import create_model, create_view, create_serializer, create_viewset, create_test, folderize
+
 
 @click.group()
 @click.argument('app_name')
@@ -17,8 +17,14 @@ def create(ctx):
     """Commands for creating elements in the Django app."""
     pass
 
-# Register the 'model' command under the 'create' group.
+# Register commands under the 'create' group.
 create.add_command(create_model)
+create.add_command(create_view)
+create.add_command(create_viewset)
+create.add_command(create_serializer)
+create.add_command(create_test)
+
+# Register  folderize command under the 'cli' group.
 cli.add_command(folderize, 'folderize')
 
 

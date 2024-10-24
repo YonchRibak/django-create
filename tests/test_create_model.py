@@ -32,7 +32,6 @@ def test_inject_into_models_py(tmp_path):
 
     # Verify that the model was injected into models.py
     assert result.exit_code == 0
-    assert "Injecting model into 'models.py'..." in result.output
     assert f"class {model_name}(models.Model):" in models_py_path.read_text()
 
 
@@ -66,7 +65,6 @@ def test_create_in_models_folder(tmp_path):
 
     # Verify that the model was created inside the models folder
     assert result.exit_code == 0
-    assert f"Creating model file '{model_file_name}' inside the specified path..." in result.output
     assert model_file_path.exists()
     assert f"class {model_name}(models.Model):" in model_file_path.read_text()
     assert f"from .{model_file_name[:-3]} import {model_name}" in init_file_path.read_text()
@@ -103,7 +101,6 @@ def test_create_in_custom_path(tmp_path):
 
     # Verify that the model was created in the custom path
     assert result.exit_code == 0
-    assert f"Creating model file '{model_file_name}' inside the specified path..." in result.output
     assert model_file_path.exists()
     assert f"class {model_name}(models.Model):" in model_file_path.read_text()
     assert f"from .{model_file_name[:-3]} import {model_name}" in init_file_path.read_text()

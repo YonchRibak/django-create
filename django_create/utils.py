@@ -82,6 +82,8 @@ def create_mock_django_app(
     app_name='myapp', 
     with_models_file=True, 
     with_views_file=True,
+    with_viewsets_file=True,
+    with_serializers_file=True,
     with_tests_file=True,
     with_models_folder=False, 
     with_views_folder=False, 
@@ -118,6 +120,16 @@ def create_mock_django_app(
         views_py = app_path / 'views.py'
         views_py.write_text("# views.py file for testing\n")
 
+    # Create viewsets.py if requested
+    if with_viewsets_file:
+        viewsets_py = app_path / 'viewsets.py'
+        viewsets_py.write_text("# viewsets.py file for testing\n")
+
+    # Create serializers.py if requested
+    if with_serializers_file:
+        serializers_py = app_path / 'serializers.py'
+        serializers_py.write_text("# serializers.py file for testing\n")
+    
     # Create tests.py if requested
     if with_tests_file:
         tests_py = app_path / 'tests.py'

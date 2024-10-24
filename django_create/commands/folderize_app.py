@@ -37,7 +37,7 @@ def folderize(ctx):
         file_path = os.path.join(base_path, file_name)
         if os.path.exists(file_path):
             os.remove(file_path)
-            click.echo(f"Removed '{file_name}'.")
+         
 
     for folder_name in folders_to_create:
         folder_path = os.path.join(base_path, folder_name)
@@ -45,7 +45,7 @@ def folderize(ctx):
         init_file = os.path.join(folder_path, '__init__.py')
         with open(init_file, 'w') as f:
             f.write("# This file allows the directory to be treated as a Python module.\n")
-        click.echo(f"Created folder '{folder_name}' with __init__.py.")
+       
 
     click.echo(f"App '{app_name}' has been folderized successfully.")
 
