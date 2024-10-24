@@ -33,19 +33,25 @@ def create_model(app_name, model_name):
     model_template_path = os.path.join(templates_path, 'model_template.txt')
     model_content = render_template(model_template_path, model_name=model_name)
 
-    # Check if models.py exists and models folder does not exist
+    # Debug output to understand which path is taken
+    click.echo(f"Checking existence of 'models.py': {os.path.exists(models_py_path)}")
+    click.echo(f"Checking existence of 'models/' folder: {os.path.exists(models_folder_path)}")
+
+    # Decision logic
     if os.path.exists(models_py_path) and not os.path.exists(models_folder_path):
         click.echo("Injecting model into 'models.py'...")
         inject_element_into_file(models_py_path, model_content)
-    else:
-        # Ensure the models folder exists
-        os.makedirs(models_folder_path, exist_ok=True)
-        
-        # Create the model file inside the models folder
+    elif os.path.exists(models_folder_path) and not os.path.exists(models_py_path):
         click.echo(f"Creating model file '{model_file_name}' inside the 'models' folder...")
         create_element_file(model_file_path, model_content)
-
-        # Add import to __init__.py
         add_import_to_file(init_file_path, model_name, model_file_name)
+    elif os.path.exists(models_py_path) and os.path.exists(models_folder_path):
+        raise click.ClickException(
+            "Both 'models.py' and 'models/' folder exist. Please remove one before proceeding."
+        )
+    else:
+        raise click.ClickException(
+            "Neither 'models.py' nor 'models/' folder exists. Please create one before proceeding."
+        )
 
     click.echo(f"Model '{model_name}' created successfully in app '{app_name}'.")

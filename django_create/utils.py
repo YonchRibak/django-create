@@ -104,40 +104,41 @@ def create_mock_django_app(
     - Path to the mock app.
     """
     app_path = tmp_path / app_name
-    app_path.mkdir()
+    app_path.mkdir(parents=True, exist_ok=True)
 
-    # Create models.py or models/ folder as needed
+    # Create models.py if requested
     if with_models_file:
         models_py = app_path / 'models.py'
         models_py.write_text("# models.py file for testing\n")
 
+    # Create models folder if requested
     if with_models_folder:
         models_folder = app_path / 'models'
-        models_folder.mkdir()
+        models_folder.mkdir(parents=True, exist_ok=True)
         (models_folder / '__init__.py').write_text("# models/__init__.py for testing\n")
 
-    # Create views/ folder if needed
+    # Create views folder if requested
     if with_views_folder:
         views_folder = app_path / 'views'
-        views_folder.mkdir()
+        views_folder.mkdir(parents=True, exist_ok=True)
         (views_folder / '__init__.py').write_text("# views/__init__.py for testing\n")
 
-    # Create viewsets/ folder if needed
+    # Create viewsets folder if requested
     if with_viewsets_folder:
         viewsets_folder = app_path / 'viewsets'
-        viewsets_folder.mkdir()
+        viewsets_folder.mkdir(parents=True, exist_ok=True)
         (viewsets_folder / '__init__.py').write_text("# viewsets/__init__.py for testing\n")
 
-    # Create serializers/ folder if needed
+    # Create serializers folder if requested
     if with_serializers_folder:
         serializers_folder = app_path / 'serializers'
-        serializers_folder.mkdir()
+        serializers_folder.mkdir(parents=True, exist_ok=True)
         (serializers_folder / '__init__.py').write_text("# serializers/__init__.py for testing\n")
 
-    # Create tests/ folder if needed
+    # Create tests folder if requested
     if with_tests_folder:
         tests_folder = app_path / 'tests'
-        tests_folder.mkdir()
+        tests_folder.mkdir(parents=True, exist_ok=True)
         (tests_folder / '__init__.py').write_text("# tests/__init__.py for testing\n")
         (tests_folder / 'test_sample.py').write_text("# Sample test file for testing\n")
 

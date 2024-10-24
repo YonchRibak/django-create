@@ -74,7 +74,7 @@ def test_create_mock_django_app(tmp_path):
     assert tests_init_path.read_text() == "# tests/__init__.py for testing\n"
     assert test_sample_path.exists()
     assert test_sample_path.read_text() == "# Sample test file for testing\n"
-
+    
 def test_inject_element_into_file(tmp_path):
     # Create a mock Django app with models.py
     app_path = create_mock_django_app(tmp_path, with_models_file=True)
