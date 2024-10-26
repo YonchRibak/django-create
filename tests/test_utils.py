@@ -6,7 +6,8 @@ from django_create.utils import (
     add_import_to_file,
     render_template,
     save_rendered_template,
-    snake_case
+    snake_case,
+    extract_file_contents
 )
 
 def test_create_mock_django_app(tmp_path):
@@ -130,3 +131,102 @@ def test_snake_case():
     assert snake_case('CamelCASE') == 'camel_case'
     assert snake_case('camelCase') == 'camel_case'
     assert snake_case('Already_Snake_Case') == 'already_snake_case'
+
+def test_extract_file_contents_with_imports_and_single_class(tmp_path):
+    # Create a sample file with imports and a single top-level class
+    file_path = tmp_path / "sample.py"
+    file_content = """
+import os
+from django.db import models
+
+class SampleModel(models.Model):
+    name = models.CharField(max_length=100)
+"""
+    file_path.write_text(file_content)
+
+    # Extract content using extract_file_contents
+    result = extract_file_contents(file_path)
+
+    # Assertions
+    assert "imports" in result
+    assert result["imports"] == "import os\nfrom django.db import models"
+    assert "SampleModel" in result
+    assert "class SampleModel(models.Model):" in result["SampleModel"]
+    assert "name = models.CharField(max_length=100)" in result["SampleModel"]
+
+
+def test_extract_file_contents_with_multiple_classes(tmp_path):
+    # Create a sample file with multiple top-level classes
+    file_path = tmp_path / "sample.py"
+    file_content = """
+from django.db import models
+from ..utils import some_function 
+
+class SampleModel(models.Model):
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+
+class AnotherModel(models.Model):
+    description = models.TextField()
+"""
+    file_path.write_text(file_content)
+
+    # Extract content using extract_file_contents
+    result = extract_file_contents(file_path)
+
+    # Assertions
+    assert "imports" in result
+    assert "from django.db import models" in result["imports"]
+    assert "from ..utils import some_function" in result["imports"]
+    assert "SampleModel" in result
+    assert "class SampleModel(models.Model):" in result["SampleModel"]
+    assert "AnotherModel" in result
+    assert "class AnotherModel(models.Model):" in result["AnotherModel"]
+
+
+def test_extract_file_contents_with_nested_classes(tmp_path):
+    # Create a sample file with a top-level class containing a nested class
+    file_path = tmp_path / "sample.py"
+    file_content = """
+from django.db import models
+
+class OuterClass:
+    class NestedClass:
+        pass
+
+class TopLevelModel(models.Model):
+    name = models.CharField(max_length=100)
+"""
+    file_path.write_text(file_content)
+
+    # Extract content using extract_file_contents
+    result = extract_file_contents(file_path)
+
+    # Assertions: Only top-level classes should be captured
+    assert "imports" in result
+    assert result["imports"] == "from django.db import models"
+    assert "OuterClass" in result
+    assert "class OuterClass:" in result["OuterClass"]
+    assert "class NestedClass:" in result["OuterClass"]
+    assert "TopLevelModel" in result
+    assert "class TopLevelModel(models.Model):" in result["TopLevelModel"]
+    assert "name = models.CharField(max_length=100)" in result["TopLevelModel"]
+    assert "NestedClass" not in result  # Nested classes should not appear at the top level
+
+
+def test_extract_file_contents_with_no_imports_or_classes(tmp_path):
+    # Create a file with no imports or classes
+    file_path = tmp_path / "sample.py"
+    file_content = """
+# This is a comment
+x = 5
+"""
+    file_path.write_text(file_content)
+
+    # Extract content using extract_file_contents
+    result = extract_file_contents(file_path)
+
+    # Assertions
+    assert "imports" in result
+    assert result["imports"] == ""
+    assert len(result) == 1  # Only 'imports' should be present

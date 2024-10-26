@@ -179,3 +179,28 @@ def is_import_in_file(file, import_txt) -> bool:
     with open(file, 'r') as file:
         content = file.read()
         return import_txt in content
+    
+
+def extract_file_contents(file_path):
+    """
+    Extracts imports and top-level class definitions from a file.
+    Returns a dictionary with 'imports' as one key and each top-level class name as additional keys.
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # Extract all imports (lines starting with 'import' or 'from')
+    imports = "\n".join(re.findall(r'^(?:from|import) .+', content, re.MULTILINE))
+
+    # Extract each top-level class with just the class name as the key
+    classes = {}
+    class_matches = re.finditer(r'^(class\s+(\w+)\s*.*:)', content, re.MULTILINE)
+    for match in class_matches:
+        class_name = match.group(2)  # group 2 captures just the class name
+        # Extract the full class definition by finding where it starts and ends
+        start = match.start()
+        end = content.find("\n\n", start)  # assuming classes are separated by two newlines
+        class_content = content[start:end].strip()
+        classes[class_name] = class_content
+
+    return {"imports": imports, **classes}
