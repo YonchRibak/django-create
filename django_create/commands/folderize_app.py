@@ -13,8 +13,8 @@ def folderize(ctx):
     app_name = ctx.obj['app_name']
     click.echo(f"Folderizing app '{app_name}'...")
 
-    base_path = os.path.join(os.getcwd(), app_name)
-    if not os.path.exists(base_path):
+    base_path = find_app_path(app_name)
+    if not base_path:
         click.echo(f"Error: The app '{app_name}' does not exist.")
         return
 
@@ -57,3 +57,12 @@ def contains_class_definition(file_path):
         content = f.read()
         # Look for any class definitions using a regex pattern
         return re.search(r'^\s*class\s+\w+', content, re.MULTILINE) is not None
+
+def find_app_path(app_name):
+    """
+    Search for the app_name folder in the current directory and its subdirectories.
+    """
+    for root, dirs, _ in os.walk(os.getcwd()):
+        if app_name in dirs:
+            return os.path.join(root, app_name)
+    return None

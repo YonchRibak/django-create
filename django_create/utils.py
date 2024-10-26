@@ -89,7 +89,8 @@ def create_mock_django_app(
     with_views_folder=False, 
     with_viewsets_folder=False, 
     with_serializers_folder=False, 
-    with_tests_folder=False
+    with_tests_folder=False,
+    subdirectory=None
 ):
     """
     Creates a mock Django app directory structure for testing.
@@ -107,7 +108,10 @@ def create_mock_django_app(
     Returns:
     - Path to the mock app.
     """
-    app_path = tmp_path / app_name
+    
+    base_path = tmp_path / subdirectory if subdirectory else tmp_path
+    base_path.mkdir(parents=True, exist_ok=True)
+    app_path = base_path / app_name
     app_path.mkdir(parents=True, exist_ok=True)
 
     # Create models.py if requested

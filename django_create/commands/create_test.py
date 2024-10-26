@@ -26,6 +26,16 @@ def create_test(ctx, test_name, path):
     # Use the current working directory as the base path
     base_path = Path(os.getcwd()).resolve()
     app_path = base_path / app_name
+
+    if not app_path.exists():
+        # If not, check in each subfolder of base_path
+        possible_paths = [folder / app_name for folder in base_path.iterdir() if folder.is_dir()]
+        app_path = next((p for p in possible_paths if p.exists()), None)
+        
+        if not app_path:
+            click.echo(f"Error: Could not find app '{app_name}' in {base_path} or any subfolder.")
+            return
+        
     tests_py_path = app_path / 'tests.py'
     tests_folder_path = app_path / 'tests'
     

@@ -162,3 +162,33 @@ def test_creates_folder_when_none_exist(tmp_path):
     assert viewsets_folder_path.is_dir()
     assert viewset_file_path.exists()
     assert f"class {viewset_name}(viewsets.ModelViewSet):" in viewset_file_path.read_text()
+
+def test_inject_into_viewsets_py_in_subdirectory(tmp_path):
+    # Create a mock Django app with viewsets.py
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_viewsets_file=True,
+        with_viewsets_folder=False,
+        subdirectory='subdir'
+    )
+
+    # Define the path to viewsets.py using Pathlib
+    viewsets_py_path = app_path / 'viewsets.py'
+    runner = CliRunner()
+    viewset_name = "SomeViewset"
+
+    # Change the working directory to the mock environment's base
+    os.chdir(tmp_path)
+
+    # Run the create_viewset command
+    result = runner.invoke(cli, ['testapp', 'create', 'viewset', viewset_name])
+
+    # Print output for debugging
+    print(result.output)
+    print(f"Resolved viewsets.py path: {viewsets_py_path}")
+    print(f"viewsets.py exists: {viewsets_py_path.exists()}")
+
+    # Verify that the viewset was injected into viewsets.py
+    assert result.exit_code == 0
+    assert f"class {viewset_name}(viewsets.ModelViewSet):" in viewsets_py_path.read_text()

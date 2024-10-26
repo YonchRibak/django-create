@@ -16,6 +16,9 @@ click = "^8.1"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
 
+[tool.poetry.scripts]
+django-create = "django_create.cli:cli"
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
