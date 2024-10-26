@@ -1,0 +1,4 @@
+
+class {{ viewset_name }}(viewsets.ModelViewSet):
+    queryset = {{ model_name }}.objects.all()
+    serializer_class = {{ serializer_name }}

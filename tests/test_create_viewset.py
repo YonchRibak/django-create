@@ -192,3 +192,30 @@ def test_inject_into_viewsets_py_in_subdirectory(tmp_path):
     # Verify that the viewset was injected into viewsets.py
     assert result.exit_code == 0
     assert f"class {viewset_name}(viewsets.ModelViewSet):" in viewsets_py_path.read_text()
+
+def test_inject_viewset_without_duplicate_import(tmp_path):
+    # Create a mock Django app with viewsets.py that already contains the viewsets import
+    app_path = create_mock_django_app(tmp_path, app_name='testapp', with_viewsets_file=True, with_viewsets_folder=False)
+    
+    # Ensure viewsets.py exists and contains the import
+    viewsets_py_path = app_path / 'viewsets.py'
+    viewsets_py_path.write_text("from rest_framework import viewsets\n\n# Existing viewsets\n")
+
+    runner = CliRunner()
+    viewset_name = "TestViewsetWithoutImport"
+
+    # Run the create_viewset command to inject the viewset without adding the import
+    os.chdir(tmp_path)
+    result = runner.invoke(cli, ['testapp', 'create', 'viewset', viewset_name])
+
+    # Print output for debugging
+    print(result.output)
+
+    # Verify that the command executed successfully
+    assert result.exit_code == 0
+    assert "viewset 'TestViewsetWithoutImport' created successfully" in result.output
+
+    # Check the contents of viewsets.py to confirm no duplicate import was added
+    content = viewsets_py_path.read_text()
+    assert content.count("from rest_framework import viewsets") == 1
+    assert f"class {viewset_name}(viewsets.ModelViewSet):" in content

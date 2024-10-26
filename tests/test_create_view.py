@@ -155,3 +155,30 @@ def test_error_no_views_file_or_folder(tmp_path):
     # Verify that an error is raised about neither existing
     assert result.exit_code != 0
     assert "Neither 'views.py' nor 'views/' folder exists" in result.output
+
+def test_inject_view_without_duplicate_import(tmp_path):
+    # Create a mock Django app with views.py that already contains the views import
+    app_path = create_mock_django_app(tmp_path, app_name='testapp', with_views_file=True, with_views_folder=False)
+    
+    # Ensure views.py exists and contains the import
+    views_py_path = app_path / 'views.py'
+    views_py_path.write_text("from django.db import View\n\n# Existing views\n")
+
+    runner = CliRunner()
+    view_name = "TestViewWithoutImport"
+
+    # Run the create_view command to inject the view without adding the import
+    os.chdir(tmp_path)
+    result = runner.invoke(cli, ['testapp', 'create', 'view', view_name])
+
+    # Print output for debugging
+    print(result.output)
+
+    # Verify that the command executed successfully
+    assert result.exit_code == 0
+    assert "view 'TestViewWithoutImport' created successfully" in result.output
+
+    # Check the contents of views.py to confirm no duplicate import was added
+    content = views_py_path.read_text()
+    assert content.count("from django.db import View") == 1
+    assert f"class {view_name}(View):" in content

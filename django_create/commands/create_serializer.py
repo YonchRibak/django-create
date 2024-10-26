@@ -6,7 +6,8 @@ from ..utils import (
     inject_element_into_file,
     create_element_file,
     add_import_to_file,
-    render_template
+    render_template,
+    is_import_in_file
 )
 
 @click.command(name='serializer')
@@ -54,10 +55,15 @@ def create_serializer(ctx, serializer_name, path):
     templates_path = Path(__file__).parent.parent / 'templates'
     serializer_template_path = templates_path / 'serializer_template.txt'
     serializer_content = render_template(serializer_template_path, serializer_name=serializer_name)
+    serializer_template_no_import_path = templates_path / 'serializer_template_no_import.txt'
+    serializer_content_no_import = render_template(serializer_template_no_import_path, serializer_name=serializer_name)
 
 
     if serializers_py_path.exists() and not serializers_folder_path.exists():
-        inject_element_into_file(serializers_py_path, serializer_content)
+        if is_import_in_file(serializers_py_path, 'from rest_framework import serializers'):
+            inject_element_into_file(serializers_py_path, serializer_content_no_import)
+        else:
+            inject_element_into_file(serializers_py_path, serializer_content)
     elif serializers_folder_path.exists() and not serializers_py_path.exists():
         # Ensure the custom path exists if provided
         if path:

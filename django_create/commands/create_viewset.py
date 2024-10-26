@@ -6,7 +6,8 @@ from ..utils import (
     inject_element_into_file,
     create_element_file,
     add_import_to_file,
-    render_template
+    render_template,
+    is_import_in_file
 )
 
 @click.command(name='viewset')
@@ -53,10 +54,14 @@ def create_viewset(ctx, viewset_name, path):
     templates_path = Path(__file__).parent.parent / 'templates'
     viewset_template_path = templates_path / 'viewset_template.txt'
     viewset_content = render_template(viewset_template_path, viewset_name=viewset_name)
-
+    viewset_template_path_no_import = templates_path / 'viewset_template_no_import.txt'
+    viewset_content_no_import = render_template(viewset_template_path_no_import, viewset_name=viewset_name)
 
     if viewsets_py_path.exists() and not viewsets_folder_path.exists():
-        inject_element_into_file(viewsets_py_path, viewset_content)
+        if is_import_in_file(viewsets_py_path, 'from rest_framework import viewsets'):
+            inject_element_into_file(viewsets_py_path, viewset_content_no_import)
+        else:
+            inject_element_into_file(viewsets_py_path, viewset_content)
     elif viewsets_folder_path.exists() and not viewsets_py_path.exists():
         # Ensure the custom path exists if provided
         if path:

@@ -1,0 +1,6 @@
+
+class {{ test_name }}(TestCase):
+    
+    def setUp(self):
+        self.client = APIClient()
+      

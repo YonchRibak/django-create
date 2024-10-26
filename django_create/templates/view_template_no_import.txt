@@ -1,0 +1,13 @@
+
+class {{ view_name }}(View):
+    """
+    A class-based view for {{ view_name }}.
+    """
+
+    def get(self, request, *args, **kwargs):
+        # Replace this with your GET request logic
+        return HttpResponse("GET response for {{ view_name }}")
+
+    def post(self, request, *args, **kwargs):
+        # Replace this with your POST request logic (if needed)
+        return HttpResponse("POST response for {{ view_name }}")

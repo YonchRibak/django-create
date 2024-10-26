@@ -6,7 +6,8 @@ from ..utils import (
     inject_element_into_file,
     create_element_file,
     add_import_to_file,
-    render_template
+    render_template, 
+    is_import_in_file
 )
 
 @click.command(name='test')
@@ -54,10 +55,14 @@ def create_test(ctx, test_name, path):
     templates_path = Path(__file__).parent.parent / 'templates'
     test_template_path = templates_path / 'test_template.txt'
     test_content = render_template(test_template_path, test_name=test_name)
-
+    test_template_path_no_import = templates_path / 'test_template_no_import.txt'
+    test_content_no_import = render_template(test_template_path_no_import, test_name=test_name)
 
     if tests_py_path.exists() and not tests_folder_path.exists():
-        inject_element_into_file(tests_py_path, test_content)
+        if is_import_in_file(tests_py_path,'from django.test import TestCase'):
+            inject_element_into_file(tests_py_path, test_content_no_import)
+        else:
+            inject_element_into_file(tests_py_path, test_content)
     elif tests_folder_path.exists() and not tests_py_path.exists():
         # Ensure the custom path exists if provided
         if path:

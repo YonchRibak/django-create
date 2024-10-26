@@ -154,3 +154,30 @@ def test_error_no_models_file_or_folder(tmp_path):
     # Verify that an error is raised about neither existing
     assert result.exit_code != 0
     assert "Neither 'models.py' nor 'models/' folder exists" in result.output
+
+def test_inject_model_without_duplicate_import(tmp_path):
+    # Create a mock Django app with models.py that already contains the models import
+    app_path = create_mock_django_app(tmp_path, app_name='testapp', with_models_file=True, with_models_folder=False)
+    
+    # Ensure models.py exists and contains the import
+    models_py_path = app_path / 'models.py'
+    models_py_path.write_text("from django.db import models\n\n# Existing models\n")
+
+    runner = CliRunner()
+    model_name = "TestModelWithoutImport"
+
+    # Run the create_model command to inject the model without adding the import
+    os.chdir(tmp_path)
+    result = runner.invoke(cli, ['testapp', 'create', 'model', model_name])
+
+    # Print output for debugging
+    print(result.output)
+
+    # Verify that the command executed successfully
+    assert result.exit_code == 0
+    assert "Model 'TestModelWithoutImport' created successfully" in result.output
+
+    # Check the contents of models.py to confirm no duplicate import was added
+    content = models_py_path.read_text()
+    assert content.count("from django.db import models") == 1
+    assert f"class {model_name}(models.Model):" in content

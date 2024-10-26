@@ -154,3 +154,30 @@ def test_error_no_serializers_file_or_folder(tmp_path):
     # Verify that an error is raised about neither existing
     assert result.exit_code != 0
     assert "Neither 'serializers.py' nor 'serializers/' folder exists" in result.output
+
+def test_inject_serializer_without_duplicate_import(tmp_path):
+    # Create a mock Django app with serializers.py that already contains the serializers import
+    app_path = create_mock_django_app(tmp_path, app_name='testapp', with_serializers_file=True, with_serializers_folder=False)
+    
+    # Ensure serializers.py exists and contains the import
+    serializers_py_path = app_path / 'serializers.py'
+    serializers_py_path.write_text("from rest_framework import serializers\n\n# Existing serializers\n")
+
+    runner = CliRunner()
+    serializer_name = "TestSerializerWithoutImport"
+
+    # Run the create_serializer command to inject the serializer without adding the import
+    os.chdir(tmp_path)
+    result = runner.invoke(cli, ['testapp', 'create', 'serializer', serializer_name])
+
+    # Print output for debugging
+    print(result.output)
+
+    # Verify that the command executed successfully
+    assert result.exit_code == 0
+    assert "serializer 'TestSerializerWithoutImport' created successfully" in result.output
+
+    # Check the contents of serializers.py to confirm no duplicate import was added
+    content = serializers_py_path.read_text()
+    assert content.count("from rest_framework import serializers") == 1
+    assert f"class {serializer_name}(serializers.ModelSerializer):" in content

@@ -6,7 +6,8 @@ from ..utils import (
     inject_element_into_file,
     create_element_file,
     add_import_to_file,
-    render_template
+    render_template,
+    is_import_in_file
 )
 
 @click.command(name='model')
@@ -52,11 +53,15 @@ def create_model(ctx, model_name, path):
     # Define the path to the model template
     templates_path = Path(__file__).parent.parent / 'templates'
     model_template_path = templates_path / 'model_template.txt'
+    model_template_no_import_path = templates_path / 'model_template_no_import.txt'
     model_content = render_template(model_template_path, model_name=model_name)
-
+    model_content_no_import = render_template(model_template_no_import_path, model_name=model_name)
+    
     if models_py_path.exists() and not models_folder_path.exists():
-  
-        inject_element_into_file(models_py_path, model_content)
+        if is_import_in_file(models_py_path, 'from django.db import models'):
+            inject_element_into_file(models_py_path, model_content_no_import)
+        else:
+            inject_element_into_file(models_py_path,model_content)
     elif models_folder_path.exists() and not models_py_path.exists():
         # Ensure the custom path exists if provided
         if path:

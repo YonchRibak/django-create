@@ -155,3 +155,30 @@ def test_error_no_tests_file_or_folder(tmp_path):
     # Verify that an error is raised about neither existing
     assert result.exit_code != 0
     assert "Neither 'tests.py' nor 'tests/' folder exists" in result.output
+
+def test_inject_test_without_duplicate_import(tmp_path):
+    # Create a mock Django app with tests.py that already contains the tests import
+    app_path = create_mock_django_app(tmp_path, app_name='testapp', with_tests_file=True, with_tests_folder=False)
+    
+    # Ensure tests.py exists and contains the import
+    tests_py_path = app_path / 'tests.py'
+    tests_py_path.write_text("from django.test import TestCase\n\n# Existing tests\n")
+
+    runner = CliRunner()
+    test_name = "TestTestWithoutImport"
+
+    # Run the create_test command to inject the test without adding the import
+    os.chdir(tmp_path)
+    result = runner.invoke(cli, ['testapp', 'create', 'test', test_name])
+
+    # Print output for debugging
+    print(result.output)
+
+    # Verify that the command executed successfully
+    assert result.exit_code == 0
+    assert "test 'TestTestWithoutImport' created successfully" in result.output
+
+    # Check the contents of tests.py to confirm no duplicate import was added
+    content = tests_py_path.read_text()
+    assert content.count("from django.test import TestCase") == 1
+    assert f"class {test_name}(TestCase):" in content

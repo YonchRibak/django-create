@@ -6,7 +6,8 @@ from ..utils import (
     inject_element_into_file,
     create_element_file,
     add_import_to_file,
-    render_template
+    render_template,
+    is_import_in_file
 )
 
 @click.command(name='view')
@@ -53,11 +54,15 @@ def create_view(ctx, view_name, path):
     # Define the path to the view template
     templates_path = Path(__file__).parent.parent / 'templates'
     view_template_path = templates_path / 'view_template.txt'
+    view_template_no_import_path = templates_path / 'view_template_no_import.txt'
     view_content = render_template(view_template_path, view_name=view_name)
-
+    view_content_no_import = render_template(view_template_no_import_path, view_name=view_name)
 
     if views_py_path.exists() and not views_folder_path.exists():
-        inject_element_into_file(views_py_path, view_content)
+        if is_import_in_file(views_py_path, 'from django.views import View'):
+            inject_element_into_file(views_py_path, view_content_no_import)
+        else:
+            inject_element_into_file(views_py_path, view_content)
     elif views_folder_path.exists() and not views_py_path.exists():
         # Ensure the custom path exists if provided
         if path:

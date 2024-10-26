@@ -171,3 +171,11 @@ def create_mock_django_app(
         (tests_folder / 'test_sample.py').write_text("# Sample test file for testing\n")
 
     return app_path
+
+def is_import_in_file(file, import_txt) -> bool:
+    """
+    Check if necessary import statement is present in file.
+    """
+    with open(file, 'r') as file:
+        content = file.read()
+        return import_txt in content
