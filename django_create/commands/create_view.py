@@ -22,7 +22,7 @@ def create_view(ctx, view_name, path):
         django-create myapp create view SomeView --path products/some_other_folder
     """
     app_name = ctx.obj['app_name']
-  
+    class_dict = ctx.obj.get('class_dict', None)  # Retrieve class_dict from ctx.obj
 
     # Use the current working directory as the base path
     base_path = Path(os.getcwd()).resolve()
@@ -50,6 +50,19 @@ def create_view(ctx, view_name, path):
     view_file_name = f"{snake_case(view_name)}.py"
     view_file_path = custom_view_path / view_file_name
     init_file_path = custom_view_path / '__init__.py'
+
+    # Write views from class_dict if provided
+    if class_dict:
+        print(f"Debug: Received class_dict: {class_dict}")  # Temporary for debug
+        imports = class_dict.get("imports", "")
+        view_content = class_dict.get(view_name, "")
+        full_content = imports + "\n\n" + view_content
+        create_element_file(view_file_path, full_content)
+    
+        # Add import to __init__.py at the specified path
+        add_import_to_file(init_file_path, view_name, view_file_name)
+
+        return
 
     # Define the path to the view template
     templates_path = Path(__file__).parent.parent / 'templates'

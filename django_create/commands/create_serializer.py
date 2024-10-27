@@ -22,7 +22,7 @@ def create_serializer(ctx, serializer_name, path):
         django-create myapp create serializer SomeSerializer --path products/some_other_folder
     """
     app_name = ctx.obj['app_name']
-  
+    class_dict = ctx.obj.get('class_dict', None)  # Retrieve class_dict from ctx.obj
 
     # Use the current working directory as the base path
     base_path = Path(os.getcwd()).resolve()
@@ -51,6 +51,19 @@ def create_serializer(ctx, serializer_name, path):
     serializer_file_path = custom_serializer_path / serializer_file_name
     init_file_path = custom_serializer_path / '__init__.py'
 
+    # Write serializers from class_dict if provided
+    if class_dict:
+        print(f"Debug: Received class_dict: {class_dict}")  # Temporary for debug
+        imports = class_dict.get("imports", "")
+        serializer_content = class_dict.get(serializer_name, "")
+        full_content = imports + "\n\n" + serializer_content
+        create_element_file(serializer_file_path, full_content)
+    
+        # Add import to __init__.py at the specified path
+        add_import_to_file(init_file_path, serializer_name, serializer_file_name)
+
+        return
+    
     # Define the path to the serializer template
     templates_path = Path(__file__).parent.parent / 'templates'
     serializer_template_path = templates_path / 'serializer_template.txt'

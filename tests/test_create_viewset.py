@@ -18,7 +18,7 @@ def test_inject_into_viewsets_py(tmp_path):
     # Define the path to viewsets.py using Pathlib
     viewsets_py_path = app_path / 'viewsets.py'
     runner = CliRunner()
-    viewset_name = "SomeViewset"
+    viewset_name = "SomeViewSet"
 
     # Change the working directory to the mock environment's base
     os.chdir(tmp_path)
@@ -51,7 +51,7 @@ def test_create_in_viewsets_folder(tmp_path):
     viewset_file_path = viewsets_folder_path / viewset_file_name
     init_file_path = viewsets_folder_path / '__init__.py'
     runner = CliRunner()
-    viewset_name = "SomeViewset"
+    viewset_name = "SomeViewSet"
 
     # Change the working directory to the mock environment's base
     os.chdir(tmp_path)
@@ -116,7 +116,7 @@ def test_error_both_viewsets_file_and_folder(tmp_path):
         with_viewsets_folder=True
     )
     runner = CliRunner()
-    viewset_name = "SomeViewset"
+    viewset_name = "SomeViewSet"
 
     # Change the working directory to the mock environment's base
     os.chdir(tmp_path)
@@ -141,7 +141,7 @@ def test_creates_folder_when_none_exist(tmp_path):
         with_viewsets_folder=False
     )
     runner = CliRunner()
-    viewset_name = "SomeViewset"
+    viewset_name = "SomeViewSet"
     viewsets_folder_path = app_path / 'viewsets'
     viewset_file_name = "some_viewset.py"
     viewset_file_path = viewsets_folder_path / viewset_file_name
@@ -176,7 +176,7 @@ def test_inject_into_viewsets_py_in_subdirectory(tmp_path):
     # Define the path to viewsets.py using Pathlib
     viewsets_py_path = app_path / 'viewsets.py'
     runner = CliRunner()
-    viewset_name = "SomeViewset"
+    viewset_name = "SomeViewSet"
 
     # Change the working directory to the mock environment's base
     os.chdir(tmp_path)
@@ -202,7 +202,7 @@ def test_inject_viewset_without_duplicate_import(tmp_path):
     viewsets_py_path.write_text("from rest_framework import viewsets\n\n# Existing viewsets\n")
 
     runner = CliRunner()
-    viewset_name = "TestViewsetWithoutImport"
+    viewset_name = "TestViewSetWithoutImport"
 
     # Run the create_viewset command to inject the viewset without adding the import
     os.chdir(tmp_path)
@@ -213,7 +213,7 @@ def test_inject_viewset_without_duplicate_import(tmp_path):
 
     # Verify that the command executed successfully
     assert result.exit_code == 0
-    assert "viewset 'TestViewsetWithoutImport' created successfully" in result.output
+    assert "Viewset 'TestViewSetWithoutImport' created successfully" in result.output
 
     # Check the contents of viewsets.py to confirm no duplicate import was added
     content = viewsets_py_path.read_text()

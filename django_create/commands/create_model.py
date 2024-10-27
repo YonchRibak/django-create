@@ -22,7 +22,8 @@ def create_model(ctx, model_name, path):
         django-create myapp create model SomeModel --path products/some_other_folder
     """
     app_name = ctx.obj['app_name']
-
+    class_dict = ctx.obj.get('class_dict', None)  # Retrieve class_dict from ctx.obj
+    # print(f"class_dict in create_model: {class_dict}")  # Verify class_dict is passed
     # Use the current working directory as the base path
     base_path = Path(os.getcwd()).resolve()
     app_path = base_path / app_name
@@ -45,11 +46,26 @@ def create_model(ctx, model_name, path):
     else:
         custom_model_path = models_folder_path
 
+
     # Construct the file paths
     model_file_name = f"{snake_case(model_name)}.py"
     model_file_path = custom_model_path / model_file_name
     init_file_path = custom_model_path / '__init__.py'
 
+
+    # Write models from class_dict if provided
+    if class_dict:
+        print(f"Debug: Received class_dict: {class_dict}")  # Temporary for debug
+        imports = class_dict.get("imports", "")
+        model_content = class_dict.get(model_name, "")
+        full_content = imports + "\n\n" + model_content
+        create_element_file(model_file_path, full_content)
+    
+        # Add import to __init__.py at the specified path
+        add_import_to_file(init_file_path, model_name, model_file_name)
+
+        return
+    
     # Define the path to the model template
     templates_path = Path(__file__).parent.parent / 'templates'
     model_template_path = templates_path / 'model_template.txt'

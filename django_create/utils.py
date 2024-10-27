@@ -1,6 +1,7 @@
 import os
 import re
 import click
+from pathlib import Path
 
 def render_template(template_path, **kwargs):
     """
@@ -23,17 +24,30 @@ def save_rendered_template(content, output_path):
     with open(output_path, 'w') as file:
         file.write(content)
 
-def snake_case(name):
+def snake_case(text):
     """
-    Converts CamelCase names to snake_case.
-    Handles cases with multiple consecutive uppercase letters correctly.
+    Convert text to snake_case, handling special cases.
+    Examples:
+        ProductViewSet -> product_viewset
+        TestViewSetWithoutImport -> test_viewset_without_import
+        Already_Snake_Case -> already_snake_case
+        UserProfile -> user_profile
     """
-    # Add an underscore between a lowercase and an uppercase letter
-    name = re.sub(r'(?<=[a-z0-9])([A-Z])', r'_\1', name)
-    # Add an underscore before sequences of uppercase letters followed by a lowercase letter
-    name = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
-    return name.lower()
-
+    # Handle ViewSet special case anywhere in the text
+    text = text.replace('ViewSet', 'Viewset')
+    
+    # If text contains underscores, just convert to lowercase
+    if '_' in text:
+        return text.lower()
+    
+    # Regular snake_case conversion for camelCase/PascalCase
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', text)
+    s2 = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1)
+    
+    # Replace 'viewset' with 'viewset' to ensure consistent casing
+    final = s2.lower().replace('view_set', 'viewset')
+    
+    return final
 def inject_element_into_file(file_path, element_content):
     """
     Injects the given element content into an existing file without altering other content.
@@ -47,12 +61,15 @@ def inject_element_into_file(file_path, element_content):
 
 def create_element_file(element_file_path, element_content):
     """
-    Creates a new file with the given element content.
-    
-    Used for creating a model, view, or serializer file in a specified directory.
+    Create a file with the specified content at the given path, ensuring the directory exists.
     """
+    # Convert element_file_path to a Path object if it's a string
+    element_file_path = Path(element_file_path)
+    
+    # Ensure the parent directory exists
+    element_file_path.parent.mkdir(parents=True, exist_ok=True)
+    
     save_rendered_template(element_content, element_file_path)
-    click.echo(f"File created at '{element_file_path}'.")
 
 def add_import_to_file(init_file_path, element_name, element_file_name):
     """
@@ -192,15 +209,66 @@ def extract_file_contents(file_path):
     # Extract all imports (lines starting with 'import' or 'from')
     imports = "\n".join(re.findall(r'^(?:from|import) .+', content, re.MULTILINE))
 
-    # Extract each top-level class with just the class name as the key
+    # Extract each top-level class
     classes = {}
-    class_matches = re.finditer(r'^(class\s+(\w+)\s*.*:)', content, re.MULTILINE)
-    for match in class_matches:
-        class_name = match.group(2)  # group 2 captures just the class name
-        # Extract the full class definition by finding where it starts and ends
-        start = match.start()
-        end = content.find("\n\n", start)  # assuming classes are separated by two newlines
-        class_content = content[start:end].strip()
-        classes[class_name] = class_content
+    # Split content into lines for processing
+    lines = content.split('\n')
+    current_class = None
+    current_content = []
+    indent_level = 0
+
+    for line in lines:
+        # Check for class definition
+        class_match = re.match(r'^class\s+(\w+)\s*.*:', line)
+        
+        if class_match:
+            # If we were processing a previous class, save it
+            if current_class:
+                classes[current_class] = '\n'.join(current_content)
+            
+            # Start new class
+            current_class = class_match.group(1)
+            current_content = [line]
+            indent_level = len(line) - len(line.lstrip())
+            continue
+
+        # If we're currently processing a class
+        if current_class:
+            # Empty lines are included if we're in a class
+            if not line.strip():
+                current_content.append(line)
+                continue
+
+            # Check if this line is part of the current class
+            current_indent = len(line) - len(line.lstrip())
+            if not line.strip() or current_indent > indent_level:
+                current_content.append(line)
+            else:
+                # This line is not part of the class, save current class and reset
+                classes[current_class] = '\n'.join(current_content)
+                current_class = None
+                current_content = []
+
+    # Save the last class if we were processing one
+    if current_class:
+        classes[current_class] = '\n'.join(current_content)
 
     return {"imports": imports, **classes}
+
+def contains_class_definition(file_path):
+    """
+    Check if a file contains any class definitions.
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+        # Look for any class definitions using a regex pattern
+        return re.search(r'^\s*class\s+\w+', content, re.MULTILINE) is not None
+
+def find_app_path(app_name):
+    """
+    Search for the app_name folder in the current directory and its subdirectories.
+    """
+    for root, dirs, _ in os.walk(os.getcwd()):
+        if app_name in dirs:
+            return os.path.join(root, app_name)
+    return None

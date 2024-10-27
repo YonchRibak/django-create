@@ -9,12 +9,13 @@ def cli(ctx, app_name):
     """Django Create: A CLI tool for organizing Django apps."""
     ctx.ensure_object(dict)
     ctx.obj['app_name'] = app_name
-
+  
 # Create the 'create' group as a sub-command under the main command.
 @cli.group()
 @click.pass_context
 def create(ctx):
     """Commands for creating elements in the Django app."""
+
     pass
 
 # Register commands under the 'create' group.
