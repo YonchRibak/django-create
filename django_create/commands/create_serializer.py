@@ -13,8 +13,9 @@ from ..utils import (
 @click.command(name='serializer')
 @click.argument('serializer_name')
 @click.option('--path', default=None, help="Subdirectory path inside the serializers folder.")
+@click.option('--model', default=None, help="Specify the model to be used in the serializer.")
 @click.pass_context
-def create_serializer(ctx, serializer_name, path):
+def create_serializer(ctx, serializer_name, path, model):
     """
     Create a new Django serializer in the specified app.
 
@@ -67,9 +68,9 @@ def create_serializer(ctx, serializer_name, path):
     # Define the path to the serializer template
     templates_path = Path(__file__).parent.parent / 'templates'
     serializer_template_path = templates_path / 'serializer_template.txt'
-    serializer_content = render_template(serializer_template_path, serializer_name=serializer_name)
+    serializer_content = render_template(serializer_template_path, serializer_name=serializer_name, model_name=model or "EnterModel")
     serializer_template_no_import_path = templates_path / 'serializer_template_no_import.txt'
-    serializer_content_no_import = render_template(serializer_template_no_import_path, serializer_name=serializer_name)
+    serializer_content_no_import = render_template(serializer_template_no_import_path, serializer_name=serializer_name, model_name=model or "EnterModel")
 
 
     if serializers_py_path.exists() and not serializers_folder_path.exists():
@@ -96,4 +97,4 @@ def create_serializer(ctx, serializer_name, path):
             "Neither 'serializers.py' nor 'serializers/' folder exists. Please create one before proceeding."
         )
 
-    click.echo(f"serializer '{serializer_name}' created successfully in app '{app_name}'.")
+    click.echo(f"Serializer '{serializer_name}' created successfully in app '{app_name}'.")

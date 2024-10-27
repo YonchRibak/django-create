@@ -13,8 +13,10 @@ from ..utils import (
 @click.command(name='viewset')
 @click.argument('viewset_name')
 @click.option('--path', default=None, help="Subdirectory path inside the viewsets folder.")
+@click.option('--model', default=None, help="Model name to insert into template.")
+@click.option('--serializer', default=None, help="Serializer name to import into template.")
 @click.pass_context
-def create_viewset(ctx, viewset_name, path):
+def create_viewset(ctx, viewset_name, path, model, serializer):
     """
     Create a new Django viewset in the specified app.
 
@@ -79,9 +81,9 @@ def create_viewset(ctx, viewset_name, path):
     # Template-based creation
     templates_path = Path(__file__).parent.parent / 'templates'
     viewset_template_path = templates_path / 'viewset_template.txt'
-    viewset_content = render_template(viewset_template_path, viewset_name=viewset_name)
+    viewset_content = render_template(viewset_template_path, viewset_name=viewset_name, model_name=model or "EnterModel", serializer_name=serializer or "EnterSerializer")
     viewset_template_path_no_import = templates_path / 'viewset_template_no_import.txt'
-    viewset_content_no_import = render_template(viewset_template_path_no_import, viewset_name=viewset_name)
+    viewset_content_no_import = render_template(viewset_template_path_no_import, viewset_name=viewset_name, model_name=model or "EnterModel", serializer_name=serializer or "EnterSerializer")
 
     if viewsets_py_path.exists():
         if is_import_in_file(viewsets_py_path, 'from rest_framework import viewsets'):
