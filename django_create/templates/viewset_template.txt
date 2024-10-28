@@ -1,6 +1,6 @@
 from rest_framework import viewsets
-from .models import {{ model_name }}
-from .serializers import {{ serializer_name }}
+from ..models import {{ model_name }}
+from ..serializers import {{ serializer_name }}
 
 class {{ viewset_name }}(viewsets.ModelViewSet):
     queryset = {{ model_name }}.objects.all()
