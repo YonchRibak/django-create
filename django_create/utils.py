@@ -277,3 +277,84 @@ def find_app_path(app_name):
         if app_name in dirs:
             return os.path.join(root, app_name)
     return None
+
+def add_import(file_path, import_statement):
+    """
+    Add an import statement to a Python file if it doesn't exist.
+    Handles both 'from x import y' and 'import x' statements.
+    Merges imports from same module and preserves file formatting.
+    
+    Args:
+        file_path: Path to the Python file
+        import_statement: Import statement to add (e.g., "from .models import Model" or "import module")
+    
+    Examples:
+        add_import(file_path, "from .models import User")
+        add_import(file_path, "from rest_framework import viewsets")
+        add_import(file_path, "import datetime")
+    """
+    with open(file_path, 'r') as f:
+        content = f.read()
+        
+    # If the exact import already exists, do nothing
+    if import_statement in content:
+        return
+        
+    # Parse the import statement
+    if import_statement.startswith('from '):
+        # Handle 'from x import y' style imports
+        module = import_statement.split(' import ')[0][5:]
+        imports = import_statement.split(' import ')[1].strip()
+    else:
+        # Handle 'import x' style imports
+        module = import_statement[7:]  # len('import ') = 7
+        imports = None
+
+    # Find all existing imports
+    import_pattern = r'^(?:from|import) .+$'
+    matches = list(re.finditer(import_pattern, content, re.MULTILINE))
+    
+    if matches:
+        last_import_end = matches[-1].end()
+        
+        if imports:  # 'from x import y' style
+            # Check if we already have imports from this module
+            module_pattern = fr'from {re.escape(module)} import ([^\n]+)'
+            existing_import = re.search(module_pattern, content)
+            
+            if existing_import:
+                # Get existing imports and add new ones
+                existing_imports = [x.strip() for x in existing_import.group(1).split(',')]
+                new_imports = [x.strip() for x in imports.split(',')]
+                
+                # Combine imports, remove duplicates, and sort
+                combined_imports = sorted(set(existing_imports + new_imports))
+                
+                # Replace the existing import line
+                new_import_line = f"from {module} import {', '.join(combined_imports)}"
+                new_content = (
+                    content[:existing_import.start()] +
+                    new_import_line +
+                    content[existing_import.end():]
+                )
+            else:
+                # Add new import line after the last import
+                new_content = (
+                    content[:last_import_end] +
+                    f"\n{import_statement}" +
+                    content[last_import_end:]
+                )
+        else:  # 'import x' style
+            # Add new import line after the last import
+            new_content = (
+                content[:last_import_end] +
+                f"\n{import_statement}" +
+                content[last_import_end:]
+            )
+    else:
+        # No imports found, add at the beginning of the file
+        new_content = f"{import_statement}\n\n{content}"
+
+    # Write the modified content back to the file
+    with open(file_path, 'w') as f:
+        f.write(new_content)

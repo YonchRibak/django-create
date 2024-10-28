@@ -7,7 +7,8 @@ from django_create.utils import (
     render_template,
     save_rendered_template,
     snake_case,
-    extract_file_contents
+    extract_file_contents,
+    add_import
 )
 
 def test_create_mock_django_app(tmp_path):
@@ -271,3 +272,35 @@ class SampleTest(TestCase):
     # Verify class content is still correct
     assert "SampleTest" in result
     assert "def test_something" in result["SampleTest"]
+
+def test_add_import(tmp_path):
+    """Test the add_import function with various scenarios."""
+    # Create a test file
+    test_file = tmp_path / "test_file.py"
+    initial_content = """from rest_framework import serializers
+from .models import User
+from django.db import models
+
+class SampleSerializer(serializers.ModelSerializer):
+    pass
+"""
+    test_file.write_text(initial_content)
+
+    # Test cases
+    add_import(test_file, "from .models import Profile")  # Should merge with existing .models import
+    add_import(test_file, "from datetime import datetime")  # Should add new import
+    add_import(test_file, "import os")  # Should add simple import
+    add_import(test_file, "from .models import User")  # Should not duplicate
+    add_import(test_file, "from rest_framework import viewsets")  # Should add to existing rest_framework import
+
+    content = test_file.read_text()
+    print("\nResulting content:")
+    print(content)
+
+    # Verify imports
+    assert "from .models import Profile, User" in content
+    assert "from datetime import datetime" in content
+    assert "import os" in content
+    assert "from rest_framework import serializers, viewsets" in content
+    assert content.count("from .models import") == 1  # No duplicate imports
+    assert content.count("User") == 1  # No duplicate model imports

@@ -6,6 +6,7 @@ from ..utils import (
     inject_element_into_file,
     create_element_file,
     add_import_to_file,
+    add_import,
     render_template,
     is_import_in_file
 )
@@ -20,10 +21,10 @@ def create_serializer(ctx, serializer_name, path, model):
     Create a new Django serializer in the specified app.
 
     Example:
-        django-create myapp create serializer SomeSerializer --path products/some_other_folder
+        django-create myapp create serializer SomeSerializer --path products/some_other_folder --model Product
     """
     app_name = ctx.obj['app_name']
-    class_dict = ctx.obj.get('class_dict', None)  # Retrieve class_dict from ctx.obj
+    class_dict = ctx.obj.get('class_dict', None)
 
     # Use the current working directory as the base path
     base_path = Path(os.getcwd()).resolve()
@@ -36,65 +37,94 @@ def create_serializer(ctx, serializer_name, path, model):
         
         if not app_path:
             click.echo(f"Error: Could not find app '{app_name}' in {base_path} or any subfolder.")
-            return
+            return 1
         
     serializers_py_path = app_path / 'serializers.py'
     serializers_folder_path = app_path / 'serializers'
     
-    # Determine the path for the serializer file based on the optional --path flag
-    if path:
-        custom_serializer_path = serializers_folder_path / Path(path)
-    else:
-        custom_serializer_path = serializers_folder_path
-
-    # Construct the file paths
-    serializer_file_name = f"{snake_case(serializer_name)}.py"
-    serializer_file_path = custom_serializer_path / serializer_file_name
-    init_file_path = custom_serializer_path / '__init__.py'
-
     # Write serializers from class_dict if provided
     if class_dict:
-        print(f"Debug: Received class_dict: {class_dict}")  # Temporary for debug
+        # Ensure serializers folder exists
+        serializers_folder_path.mkdir(parents=True, exist_ok=True)
+        
+        # Determine the file path
+        if path:
+            custom_serializer_path = serializers_folder_path / Path(path)
+            custom_serializer_path.mkdir(parents=True, exist_ok=True)
+        else:
+            custom_serializer_path = serializers_folder_path
+
+        # Construct the file paths
+        serializer_file_name = f"{snake_case(serializer_name)}.py"
+        serializer_file_path = custom_serializer_path / serializer_file_name
+        init_file_path = custom_serializer_path / '__init__.py'
+
+        # Get content from class_dict
         imports = class_dict.get("imports", "")
         serializer_content = class_dict.get(serializer_name, "")
+        if not serializer_content:
+            click.echo(f"Error: No content found for serializer {serializer_name}")
+            return 1
+
+        # Create the file and add imports
         full_content = imports + "\n\n" + serializer_content
         create_element_file(serializer_file_path, full_content)
-    
-        # Add import to __init__.py at the specified path
+
+        # Ensure __init__.py exists and add import
+        if not init_file_path.exists():
+            init_file_path.touch()
         add_import_to_file(init_file_path, serializer_name, serializer_file_name)
 
-        return
+        click.echo(f"Serializer '{serializer_name}' created successfully in app '{app_name}'.")
+        return 0
     
-    # Define the path to the serializer template
+    # Template-based creation
     templates_path = Path(__file__).parent.parent / 'templates'
-    serializer_template_path = templates_path / 'serializer_template.txt'
-    serializer_content = render_template(serializer_template_path, serializer_name=serializer_name, model_name=model or "EnterModel")
-    serializer_template_no_import_path = templates_path / 'serializer_template_no_import.txt'
-    serializer_content_no_import = render_template(serializer_template_no_import_path, serializer_name=serializer_name, model_name=model or "EnterModel")
-
+    model_name = model or "EnterModel"
 
     if serializers_py_path.exists() and not serializers_folder_path.exists():
-        if is_import_in_file(serializers_py_path, 'from rest_framework import serializers'):
-            inject_element_into_file(serializers_py_path, serializer_content_no_import)
-        else:
-            inject_element_into_file(serializers_py_path, serializer_content)
+        # Add rest_framework import if needed
+        if not is_import_in_file(serializers_py_path, 'from rest_framework import serializers'):
+            add_import(serializers_py_path, 'from rest_framework import serializers')
+        
+        # Add model import if specified
+        if model:
+            add_import(serializers_py_path, f'from .models import {model}')
+
+        # Render and inject the serializer content without imports
+        template_no_import = templates_path / 'serializer_template_no_import.txt'
+        content = render_template(template_no_import, serializer_name=serializer_name, model_name=model_name)
+        inject_element_into_file(serializers_py_path, content)
+
     elif serializers_folder_path.exists() and not serializers_py_path.exists():
-        # Ensure the custom path exists if provided
+        # Determine the custom path if provided
         if path:
+            custom_serializer_path = serializers_folder_path / Path(path)
             custom_serializer_path.mkdir(parents=True, exist_ok=True)
+        else:
+            custom_serializer_path = serializers_folder_path
 
-        # Create the serializer file inside the specified or default folder
-        create_element_file(serializer_file_path, serializer_content)
+        # Construct file paths
+        serializer_file_name = f"{snake_case(serializer_name)}.py"
+        serializer_file_path = custom_serializer_path / serializer_file_name
+        init_file_path = custom_serializer_path / '__init__.py'
 
-        # Add import to __init__.py at the specified path
+        # Create the serializer file with full imports
+        template = templates_path / 'serializer_template.txt'
+        content = render_template(template, serializer_name=serializer_name, model_name=model_name)
+        create_element_file(serializer_file_path, content)
+
+        # Add import to __init__.py
         add_import_to_file(init_file_path, serializer_name, serializer_file_name)
+
     elif serializers_py_path.exists() and serializers_folder_path.exists():
         raise click.ClickException(
             "Both 'serializers.py' and 'serializers/' folder exist. Please remove one before proceeding."
-    )
+        )
     else:
         raise click.ClickException(
             "Neither 'serializers.py' nor 'serializers/' folder exists. Please create one before proceeding."
         )
 
     click.echo(f"Serializer '{serializer_name}' created successfully in app '{app_name}'.")
+    return 0

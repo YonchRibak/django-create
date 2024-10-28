@@ -266,3 +266,95 @@ def test_create_serializer_without_model(tmp_path):
     assert init_file_path.exists()
     init_content = init_file_path.read_text()
     assert f"from .{snake_case(serializer_name)} import {serializer_name}" in init_content
+
+def test_add_serializer_with_model_to_existing_file(tmp_path):
+    """Test adding a serializer with model to a file that already has a serializer and imports."""
+    # Create a mock Django app with serializers.py containing an existing serializer
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_serializers_file=True,
+        with_serializers_folder=False
+    )
+
+    # Define initial content for serializers.py with existing serializer
+    initial_content = """from rest_framework import serializers
+from .models import User
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = '__all__'
+"""
+    # Write this content to serializers.py
+    serializers_py_path = app_path / 'serializers.py'
+    serializers_py_path.write_text(initial_content)
+
+    # Run the create_serializer command with --model flag
+    runner = CliRunner()
+    os.chdir(tmp_path)
+    result = runner.invoke(
+        cli,
+        ['testapp', 'create', 'serializer', 'ProductSerializer', '--model', 'Product']
+    )
+
+    # Print output for debugging
+    print("\nCommand output:")
+    print(result.output)
+    print("\nResulting file content:")
+    print(serializers_py_path.read_text())
+
+    # Verify command execution
+    assert result.exit_code == 0
+    assert "Serializer 'ProductSerializer' created successfully" in result.output
+
+    # Read the file content
+    content = serializers_py_path.read_text()
+
+    # Verify imports and classes after first addition
+    assert content.count("from rest_framework import serializers") == 1
+    assert content.count("from .models import") == 1
+    assert content.count("class UserSerializer(serializers.ModelSerializer):") == 1
+    assert content.count("class ProductSerializer(serializers.ModelSerializer):") == 1
+
+    # Check for both models in import, regardless of order
+    models_import_line = next(line for line in content.split('\n') if 'from .models import' in line)
+    assert 'User' in models_import_line
+    assert 'Product' in models_import_line
+
+    # Verify order (imports at top, then classes)
+    lines = content.split('\n')
+    import_lines = [i for i, line in enumerate(lines) if 'import' in line]
+    user_serializer_line = next(i for i, line in enumerate(lines) if 'class UserSerializer' in line)
+    product_serializer_line = next(i for i, line in enumerate(lines) if 'class ProductSerializer' in line)
+
+    # Check that all imports come before classes
+    assert all(import_line < user_serializer_line for import_line in import_lines)
+    assert all(import_line < product_serializer_line for import_line in import_lines)
+
+    # Try adding another serializer with a model that's already imported
+    result = runner.invoke(
+        cli,
+        ['testapp', 'create', 'serializer', 'UserProfileSerializer', '--model', 'User']
+    )
+
+    # Verify the final state
+    content = serializers_py_path.read_text()
+    
+    # Check imports haven't been duplicated
+    assert content.count("from .models import") == 1
+    assert content.count("from rest_framework import serializers") == 1
+    
+    # Check all three serializer classes exist
+    assert content.count("class UserSerializer(serializers.ModelSerializer):") == 1
+    assert content.count("class ProductSerializer(serializers.ModelSerializer):") == 1
+    assert content.count("class UserProfileSerializer(serializers.ModelSerializer):") == 1
+    
+    # Check the model statements
+    assert content.count("model = User") == 2  # One for UserSerializer, one for UserProfileSerializer
+    assert content.count("model = Product") == 1  # One for ProductSerializer
+
+    # Verify imports are still grouped together
+    models_import_line = next(line for line in content.split('\n') if 'from .models import' in line)
+    assert 'User' in models_import_line
+    assert 'Product' in models_import_line
