@@ -255,8 +255,8 @@ def test_create_viewset_with_model_and_serializer(tmp_path):
     assert viewset_file_path.exists()
     content = viewset_file_path.read_text()
     assert "from rest_framework import viewsets" in content
-    assert f"from .models import {model_name}" in content
-    assert f"from .serializers import {serializer_name}" in content
+    assert f"from ..models import {model_name}" in content
+    assert f"from ..serializers import {serializer_name}" in content
     assert f"class {viewset_name}(viewsets.ModelViewSet):" in content
     assert f"serializer_class = {serializer_name}" in content
     assert f"queryset = {model_name}.objects.all()" in content
@@ -299,8 +299,8 @@ def test_create_viewset_without_model_and_serializer(tmp_path):
     assert viewset_file_path.exists()
     content = viewset_file_path.read_text()
     assert "from rest_framework import viewsets" in content
-    assert "from .models import EnterModel" in content  # Default model name used
-    assert "from .serializers import EnterSerializer" in content  # Default serializer name used
+    assert "from ..models import EnterModel" in content  # Default model name used
+    assert "from ..serializers import EnterSerializer" in content  # Default serializer name used
     assert f"class {viewset_name}(viewsets.ModelViewSet):" in content
     assert "serializer_class = EnterSerializer" in content
     assert "queryset = EnterModel.objects.all()" in content
@@ -309,3 +309,97 @@ def test_create_viewset_without_model_and_serializer(tmp_path):
     assert init_file_path.exists()
     init_content = init_file_path.read_text()
     assert f"from .{snake_case(viewset_name)} import {viewset_name}" in init_content
+
+def test_add_second_viewset_with_imports(tmp_path):
+    """
+    Test adding a second viewset to viewsets.py with model and serializer flags.
+    Verifies that imports are properly merged and not duplicated.
+    """
+    # Create a mock Django app
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_viewsets_file=True,
+        with_viewsets_folder=False
+    )
+
+    # Define initial content for viewsets.py with existing viewset
+    initial_content = """from rest_framework import viewsets
+from ..models import User
+from ..serializers import UserSerializer
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+"""
+    # Write initial content to viewsets.py
+    viewsets_py_path = app_path / 'viewsets.py'
+    viewsets_py_path.write_text(initial_content)
+
+    # Run the create_viewset command to add a second viewset
+    runner = CliRunner()
+    os.chdir(tmp_path)
+    result = runner.invoke(
+        cli,
+        ['testapp', 'create', 'viewset', 'ProductViewSet', '--model', 'Product', '--serializer', 'ProductSerializer']
+    )
+
+    # Print debug information
+    print("\nCommand output:")
+    print(result.output)
+    print("\nFile content after adding second viewset:")
+    print(viewsets_py_path.read_text())
+
+    # Verify the command executed successfully
+    assert result.exit_code == 0
+    assert "Viewset 'ProductViewSet' created successfully" in result.output
+
+    # Read the updated content
+    content = viewsets_py_path.read_text()
+
+    # Verify imports are correctly managed
+    models_import_line = next(line for line in content.split('\n') if 'from ..models import' in line)
+    serializers_import_line = next(line for line in content.split('\n') if 'from ..serializers import' in line)
+    
+    # Check that imports have been merged correctly
+    assert content.count('from ..models import') == 1
+    assert content.count('from ..serializers import') == 1
+    assert 'User' in models_import_line and 'Product' in models_import_line
+    assert 'UserSerializer' in serializers_import_line and 'ProductSerializer' in serializers_import_line
+    assert content.count('from rest_framework import viewsets') == 1
+
+    # Check both viewset classes exist with correct references
+    assert 'class UserViewSet(viewsets.ModelViewSet):' in content
+    assert 'class ProductViewSet(viewsets.ModelViewSet):' in content
+    assert 'queryset = User.objects.all()' in content
+    assert 'queryset = Product.objects.all()' in content
+    assert 'serializer_class = UserSerializer' in content
+    assert 'serializer_class = ProductSerializer' in content
+
+    # Add a third viewset reusing an existing model but with a new serializer
+    result = runner.invoke(
+        cli,
+        ['testapp', 'create', 'viewset', 'UserProfileViewSet', '--model', 'User', '--serializer', 'UserProfileSerializer']
+    )
+
+    # Get the final content
+    final_content = viewsets_py_path.read_text()
+    print("\nFinal file content:")
+    print(final_content)
+
+    # Verify import statement merging after third viewset
+    assert final_content.count('from ..models import') == 1  # Still only one models import
+    assert final_content.count('from ..serializers import') == 1  # Still only one serializers import
+    assert 'User' in final_content and 'Product' in final_content
+    assert 'UserSerializer' in final_content and 'ProductSerializer' in final_content and 'UserProfileSerializer' in final_content
+
+    # Verify all viewsets exist in final content
+    assert 'class UserViewSet(viewsets.ModelViewSet):' in final_content
+    assert 'class ProductViewSet(viewsets.ModelViewSet):' in final_content
+    assert 'class UserProfileViewSet(viewsets.ModelViewSet):' in final_content
+
+    # Verify imports come before any class definitions
+    lines = final_content.split('\n')
+    last_import_line = max(i for i, line in enumerate(lines) if 'import' in line)
+    first_class_line = min(i for i, line in enumerate(lines) if 'class' in line)
+    assert last_import_line < first_class_line, "Imports should all come before class definitions"
