@@ -32,22 +32,16 @@ def folderize(ctx):
     print("\n=== Processing Files ===")
     for file_name in files_to_process:
         file_path = os.path.join(base_path, file_name)
-        print(f"\nProcessing: {file_name}")
-        print(f"Path: {file_path}")
-        print(f"Exists: {os.path.exists(file_path)}")
         
         if os.path.exists(file_path):
             if contains_class_definition(file_path):
-                print(f"Found classes in {file_name}")
                 # Extract content and store in extracted_classes
                 extracted_classes[file_name] = extract_file_contents(file_path)
-                print(f"Extracted content from {file_name}:")
-                print(extracted_classes[file_name])
             os.remove(file_path)  # Remove the original file after extraction
         else:
             click.echo(f"Warning: File '{file_name}' not found, skipping...")
 
-    print("\n=== Creating Folders ===")
+
     # Create required folders for folderizing
     for folder_name in folders_to_create:
         folder_path = os.path.join(base_path, folder_name)
@@ -56,33 +50,32 @@ def folderize(ctx):
         if not os.path.exists(init_file):
             with open(init_file, 'w') as f:
                 f.write("# This file allows the directory to be treated as a Python module.\n")
-        print(f"Created folder: {folder_path}")
 
-    print("\n=== Processing Classes ===")
+
     # Process extracted classes for each file
     for file_name, class_dict in extracted_classes.items():
-        print(f"\nProcessing file: {file_name}")
+    
         command_args = []
         if 'model' in file_name:
             command = create_model
             command_args = ['create', 'model']
-            print("Using create_model command")
+           
         elif 'view' in file_name and 'viewset' not in file_name:
             command = create_view
             command_args = ['create', 'view']
-            print("Using create_view command")
+         
         elif 'viewset' in file_name:
             command = create_viewset
             command_args = ['create', 'viewset']
-            print("Using create_viewset command")
+      
         elif 'test' in file_name:
             command = create_test
             command_args = ['create', 'test']
-            print("Using create_test command")
+     
         elif 'serializer' in file_name:
             command = create_serializer
             command_args = ['create', 'serializer']
-            print("Using create_serializer command")
+
         else:
             print(f"No matching command for {file_name}")
             continue
@@ -91,10 +84,10 @@ def folderize(ctx):
         imports = class_dict.get("imports", "")
 
         # Process each class (excluding the "imports" key)
-        print(f"Classes to process: {[k for k in class_dict.keys() if k != 'imports']}")
+
         for class_name in [k for k in class_dict.keys() if k != "imports"]:
             try:
-                print(f"\nCreating {class_name}...")
+        
                 # Create a new runner for each command
                 runner = CliRunner()
                 
@@ -107,7 +100,6 @@ def folderize(ctx):
                     }
                 }
                 
-                print(f"Context obj: {obj}")
                 
                 # Run the command using the runner
                 result = runner.invoke(
@@ -120,8 +112,7 @@ def folderize(ctx):
                 if result.exit_code != 0:
                     click.echo(f"Failed to create {class_name}: {result.output}")
                     return 1
-                print(f"Successfully created {class_name}")
-                click.echo(f"Successfully created {class_name}")
+
                 
             except Exception as e:
                 click.echo(f"Error creating {class_name}: {str(e)}")
