@@ -206,8 +206,13 @@ def extract_file_contents(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # Extract all imports (lines starting with 'import' or 'from')
-    imports = "\n".join(re.findall(r'^(?:from|import) .+', content, re.MULTILINE))
+    # Extract all imports
+    import_lines = []
+    for line in content.split('\n'):
+        if line.strip() and (line.strip().startswith('from ') or line.strip().startswith('import ')):
+            import_lines.append(line)
+
+    imports = "\n".join(import_lines)
 
     # Extract each top-level class
     classes = {}

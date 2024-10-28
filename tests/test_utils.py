@@ -230,3 +230,44 @@ x = 5
     assert "imports" in result
     assert result["imports"] == ""
     assert len(result) == 1  # Only 'imports' should be present
+
+def test_extract_file_contents_multiple_imports(tmp_path):
+    """Test that extract_file_contents correctly extracts multiple import lines."""
+    # Create a test file with multiple imports
+    test_file = tmp_path / "test_module.py"
+    test_content = """
+from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient
+
+class SampleTest(TestCase):
+    def test_something(self):
+        self.client = APIClient()
+        self.assertTrue(True)
+"""
+    test_file.write_text(test_content)
+
+    # Extract content
+    result = extract_file_contents(test_file)
+
+    # Expected imports
+    expected_imports = (
+        "from django.test import TestCase\n"
+        "from django.urls import reverse\n"
+        "from rest_framework import status\n"
+        "from rest_framework.test import APIClient"
+    )
+
+    # Print debug info
+    print("\nExtracted imports:")
+    print(result["imports"])
+    print("\nExpected imports:")
+    print(expected_imports)
+
+    # Verify imports
+    assert result["imports"] == expected_imports, "Multiple import lines not correctly extracted"
+
+    # Verify class content is still correct
+    assert "SampleTest" in result
+    assert "def test_something" in result["SampleTest"]

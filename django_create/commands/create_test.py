@@ -47,7 +47,7 @@ def create_test(ctx, test_name, path):
         custom_test_path = tests_folder_path
 
     # Construct the file paths
-    test_file_name = f"{snake_case(test_name)}.py"
+    test_file_name = f"test_{snake_case(test_name)}.py"
     test_file_path = custom_test_path / test_file_name
     init_file_path = custom_test_path / '__init__.py'
 

@@ -458,6 +458,8 @@ class OrderViewSetTest(APITestCase):
         
         # Check each expected file
         for file_name, expected_classes in expected_files_dict.items():
+            if folder_name == "tests": 
+                file_name = f'test_{file_name}'
             file_path = folder_path / file_name
             print(f"Checking {file_name}...")
             

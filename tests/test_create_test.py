@@ -47,7 +47,7 @@ def test_create_in_tests_folder(tmp_path):
 
     # Define the paths using Pathlib
     tests_folder_path = app_path / 'tests'
-    test_file_name = "some_test.py"
+    test_file_name = "test_some_test.py"
     test_file_path = tests_folder_path / test_file_name
     init_file_path = tests_folder_path / '__init__.py'
     runner = CliRunner()
@@ -83,7 +83,7 @@ def test_create_in_custom_path(tmp_path):
     # Define the custom path
     custom_path = 'products/some_other_folder'
     custom_test_folder_path = app_path / 'tests' / custom_path
-    test_file_name = "some_test.py"
+    test_file_name = "test_some_test.py"
     test_file_path = custom_test_folder_path / test_file_name
     init_file_path = custom_test_folder_path / '__init__.py'
     runner = CliRunner()
