@@ -142,9 +142,6 @@ def test_creates_viewsets_py_when_no_file_or_folder(tmp_path):
     )
     
     viewsets_py_path = app_path / 'viewsets.py'
-    viewsets_folder_path = app_path / 'viewsets'
-    viewset_file_name = "some_viewset.py"
-    viewset_file_path = viewsets_folder_path / viewset_file_name
     runner = CliRunner()
     viewset_name = "SomeViewSet"
 
@@ -158,26 +155,20 @@ def test_creates_viewsets_py_when_no_file_or_folder(tmp_path):
     print(result.output)
     print(f"Viewsets.py path: {viewsets_py_path}")
     print(f"Viewsets.py exists: {viewsets_py_path.exists()}")
-    print(f"Viewsets folder path: {viewsets_folder_path}")
-    print(f"Viewsets folder exists: {viewsets_folder_path.exists()}")
-    print(f"Viewset file path: {viewset_file_path}")
-    print(f"Viewset file exists: {viewset_file_path.exists()}")
+ 
 
     # Verify that the viewsets.py file was created with default content
     assert result.exit_code == 0
     assert viewsets_py_path.exists()
-    assert "# Django REST Framework Viewsets" in viewsets_py_path.read_text()
+    assert "from rest_framework import viewsets" in viewsets_py_path.read_text()
+    assert "from ..models import EnterModel" in viewsets_py_path.read_text()
+    assert "from ..serializers import EnterSerializer" in viewsets_py_path.read_text()
 
-    # Verify that the viewsets folder was created, and the viewset file exists inside
-    assert viewsets_folder_path.is_dir()
-    assert viewset_file_path.exists()
-    assert f"class {viewset_name}(viewsets.ModelViewSet):" in viewset_file_path.read_text()
-
-    # Verify that the viewsets folder was created, and the viewset file exists inside
+    # Verify that the viewsets file was created
+    assert viewsets_py_path.exists()
+    assert f"class {viewset_name}(viewsets.ModelViewSet):" in viewsets_py_path.read_text()
     assert result.exit_code == 0
-    assert viewsets_folder_path.is_dir()
-    assert viewset_file_path.exists()
-    assert f"class {viewset_name}(viewsets.ModelViewSet):" in viewset_file_path.read_text()
+
 
 def test_inject_into_viewsets_py_in_subdirectory(tmp_path):
     # Create a mock Django app with viewsets.py

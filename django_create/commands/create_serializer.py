@@ -11,6 +11,7 @@ from ..utils import (
     render_template,
     is_import_in_file,
     modify_import_statement_to_double_dot,
+    merge_item_into_import
     )
 
 @click.command(name='serializer')
@@ -106,14 +107,21 @@ def create_serializer(ctx, serializer_name, path, model):
             with open(serializers_py_path, 'w') as f:
                 f.write(content)
         else:
-            # Add required imports
-            if not is_import_in_file(serializers_py_path, Utils.DJANGO_IMPORTS['serializers']):
-                add_import(serializers_py_path, Utils.DJANGO_IMPORTS['serializers'])
             
-            # Add model import if specified
-            if model:
-                add_import(serializers_py_path, f'from .models import {model}')
-
+            model_import_line = f"from ..models import {model_name}"
+            with open(serializers_py_path, 'r') as f:
+                lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.startswith(('from ..models','from .models')):
+                    if model not in line:
+                        merged_line = merge_item_into_import(line, model_name, "from ..models" if line.startswith("from ..models") else "from .models")
+                        lines[i] = merged_line
+                        with open(serializers_py_path, 'w') as f:
+                            f.writelines(lines)
+                        
+                else: 
+                    add_import(serializers_py_path, model_import_line)
+            
             # Render and inject the serializer content without imports
             template_no_import = templates_path / 'serializer_template_no_import.txt'
             content = render_template(template_no_import, serializer_name=serializer_name, model_name=model_name)
