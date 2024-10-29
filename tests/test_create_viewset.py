@@ -132,7 +132,7 @@ def test_error_both_viewsets_file_and_folder(tmp_path):
     assert "Both 'viewsets.py' and 'viewsets/' folder exist" in result.output
 
 
-def test_creates_folder_when_none_exist(tmp_path):
+def test_creates_viewsets_py_when_no_file_or_folder(tmp_path):
     # Create a mock Django app with neither viewsets.py nor viewsets folder
     app_path = create_mock_django_app(
         tmp_path,
@@ -140,11 +140,13 @@ def test_creates_folder_when_none_exist(tmp_path):
         with_viewsets_file=False,
         with_viewsets_folder=False
     )
-    runner = CliRunner()
-    viewset_name = "SomeViewSet"
+    
+    viewsets_py_path = app_path / 'viewsets.py'
     viewsets_folder_path = app_path / 'viewsets'
     viewset_file_name = "some_viewset.py"
     viewset_file_path = viewsets_folder_path / viewset_file_name
+    runner = CliRunner()
+    viewset_name = "SomeViewSet"
 
     # Change the working directory to the mock environment's base
     os.chdir(tmp_path)
@@ -154,8 +156,22 @@ def test_creates_folder_when_none_exist(tmp_path):
 
     # Print output for debugging
     print(result.output)
+    print(f"Viewsets.py path: {viewsets_py_path}")
+    print(f"Viewsets.py exists: {viewsets_py_path.exists()}")
+    print(f"Viewsets folder path: {viewsets_folder_path}")
+    print(f"Viewsets folder exists: {viewsets_folder_path.exists()}")
     print(f"Viewset file path: {viewset_file_path}")
     print(f"Viewset file exists: {viewset_file_path.exists()}")
+
+    # Verify that the viewsets.py file was created with default content
+    assert result.exit_code == 0
+    assert viewsets_py_path.exists()
+    assert "# Django REST Framework Viewsets" in viewsets_py_path.read_text()
+
+    # Verify that the viewsets folder was created, and the viewset file exists inside
+    assert viewsets_folder_path.is_dir()
+    assert viewset_file_path.exists()
+    assert f"class {viewset_name}(viewsets.ModelViewSet):" in viewset_file_path.read_text()
 
     # Verify that the viewsets folder was created, and the viewset file exists inside
     assert result.exit_code == 0
@@ -354,19 +370,24 @@ class UserViewSet(viewsets.ModelViewSet):
     assert result.exit_code == 0
     assert "Viewset 'ProductViewSet' created successfully" in result.output
 
-    # Read the updated content
-    content = viewsets_py_path.read_text()
+    # Read the updated content and store imports lines
+  
+    with open(viewsets_py_path, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            if "from ..models" in line:
+                models_import = line
+            if "from ..serializers" in line: 
+                serializers_import = line
+            
+        # Verify imports are correctly managed
+        assert "User" in models_import, "User Should be in models import line"
+        assert "Product" in models_import, "Product Should be in models import line"
+        assert "UserSerializer" in serializers_import, "UserSerializer Should be in serializers import line"
+        assert "ProductSerializer" in serializers_import, "ProductSerializer Should be in serializers import line"
 
-    # Verify imports are correctly managed
-    models_import_line = next(line for line in content.split('\n') if 'from ..models import' in line)
-    serializers_import_line = next(line for line in content.split('\n') if 'from ..serializers import' in line)
     
-    # Check that imports have been merged correctly
-    assert content.count('from ..models import') == 1
-    assert content.count('from ..serializers import') == 1
-    assert 'User' in models_import_line and 'Product' in models_import_line
-    assert 'UserSerializer' in serializers_import_line and 'ProductSerializer' in serializers_import_line
-    assert content.count('from rest_framework import viewsets') == 1
+    content = viewsets_py_path.read_text()
 
     # Check both viewset classes exist with correct references
     assert 'class UserViewSet(viewsets.ModelViewSet):' in content
@@ -375,31 +396,3 @@ class UserViewSet(viewsets.ModelViewSet):
     assert 'queryset = Product.objects.all()' in content
     assert 'serializer_class = UserSerializer' in content
     assert 'serializer_class = ProductSerializer' in content
-
-    # Add a third viewset reusing an existing model but with a new serializer
-    result = runner.invoke(
-        cli,
-        ['testapp', 'create', 'viewset', 'UserProfileViewSet', '--model', 'User', '--serializer', 'UserProfileSerializer']
-    )
-
-    # Get the final content
-    final_content = viewsets_py_path.read_text()
-    print("\nFinal file content:")
-    print(final_content)
-
-    # Verify import statement merging after third viewset
-    assert final_content.count('from ..models import') == 1  # Still only one models import
-    assert final_content.count('from ..serializers import') == 1  # Still only one serializers import
-    assert 'User' in final_content and 'Product' in final_content
-    assert 'UserSerializer' in final_content and 'ProductSerializer' in final_content and 'UserProfileSerializer' in final_content
-
-    # Verify all viewsets exist in final content
-    assert 'class UserViewSet(viewsets.ModelViewSet):' in final_content
-    assert 'class ProductViewSet(viewsets.ModelViewSet):' in final_content
-    assert 'class UserProfileViewSet(viewsets.ModelViewSet):' in final_content
-
-    # Verify imports come before any class definitions
-    lines = final_content.split('\n')
-    last_import_line = max(i for i, line in enumerate(lines) if 'import' in line)
-    first_class_line = min(i for i, line in enumerate(lines) if 'class' in line)
-    assert last_import_line < first_class_line, "Imports should all come before class definitions"

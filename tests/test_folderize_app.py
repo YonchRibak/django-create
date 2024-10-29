@@ -484,7 +484,7 @@ class OrderViewSetTest(APITestCase):
                 # Check for Meta class in serializers
                 assert 'class Meta:' in content, f"Missing Meta class in {file_name}"
                 # Check for proper model import
-                assert 'from .models import' in content, f"Missing model import in {file_name}"
+                assert 'from ..models import' in content, f"Missing model import in {file_name}"
 
     # Verify original files are removed
     for file_name in files_content:

@@ -3,6 +3,60 @@ import re
 import click
 from pathlib import Path
 
+class Utils:
+    DJANGO_IMPORTS = {
+        'models': 'from django.db import models',
+        # Update views import to match template
+        'views': 'from django.views import View',
+        'serializers': 'from rest_framework import serializers',
+        'viewsets': 'from rest_framework import viewsets',
+        'tests': 'from django.test import TestCase',
+        'admin': 'from django.contrib import admin'
+    }
+
+    DEFAULT_COMMENTS = {
+        'models': '# Create your models here',
+        'views': '# Create your views here',
+        'serializers': '# Create your serializers here',
+        'viewsets': '# Create your viewsets here',
+        'tests': '# Create your tests here',
+        'admin': '# Register your models here'
+    }
+
+    @classmethod
+    def get_default_patterns(cls):
+        """Get default patterns dictionary constructed from imports and comments."""
+        return {
+            file_type: [cls.DJANGO_IMPORTS[file_type], cls.DEFAULT_COMMENTS[file_type]]
+            for file_type in cls.DJANGO_IMPORTS.keys()
+        }
+
+    @classmethod
+    def is_default_content(cls, file_path, file_type):
+        """
+        Check if file only contains Django's default content.
+        
+        Args:
+            file_path: Path to the file to check
+            file_type: Type of file ('models', 'views', etc.)
+            
+        Returns:
+            bool: True if file only contains default content
+        """
+        with open(file_path, 'r') as f:
+            content = f.read().strip()
+        
+        # Get default patterns for this file type
+        default_patterns = cls.get_default_patterns().get(file_type, [])
+        
+        # Remove all whitespace for comparison
+        cleaned_content = ''.join(content.split())
+        
+        # Join default patterns without whitespace
+        default_content = ''.join(''.join(pattern.split()) for pattern in default_patterns)
+        
+        return cleaned_content == default_content
+    
 def render_template(template_path, **kwargs):
     """
     Reads a template file and replaces placeholders with provided values.
@@ -71,14 +125,17 @@ def create_element_file(element_file_path, element_content):
     
     save_rendered_template(element_content, element_file_path)
 
-def add_import_to_file(init_file_path, element_name, element_file_name):
+def add_import_to_file(init_file_path, element_name, element_file_name, is_double_dot=False):
     """
     Adds an import statement to a specified file (e.g., models/__init__.py) for the new element.
     
     Can be used to add imports for models, views, serializers, etc.
     """
-    import_statement = f"from .{element_file_name[:-3]} import {element_name}\n"
-    
+    if is_double_dot:
+        import_statement = f"from ..{element_file_name[:-3]} import {element_name}\n"
+    else: 
+        import_statement = f"from .{element_file_name[:-3]} import {element_name}\n"
+
     # Ensure __init__.py exists
     os.makedirs(os.path.dirname(init_file_path), exist_ok=True)
     if not os.path.exists(init_file_path):
@@ -358,3 +415,53 @@ def add_import(file_path, import_statement):
     # Write the modified content back to the file
     with open(file_path, 'w') as f:
         f.write(new_content)
+
+def merge_item_into_import(existing_import_line, item, from_statement):
+    """
+    Merge an item into an existing import line if the from_statement matches.
+    
+    Args:
+        existing_import_line (str): The existing import line.
+        item (str): The item to be merged into the import line.
+        from_statement (str): The from statement to check against the existing import line.
+    
+    Returns:
+        str: The updated import line with the item merged in.
+    """
+    if existing_import_line.startswith(from_statement):
+        # Extract the existing imports
+        existing_imports = existing_import_line.split('import ')[-1].split(', ')
+        
+        # Check if the item is already in the existing imports
+        if item in existing_imports:
+            return existing_import_line
+        
+        # Merge the item into the existing imports
+        existing_imports.append(item)
+        existing_imports = sorted(set(existing_imports))
+        
+        # Construct the updated import line
+        return f"{from_statement} import {', '.join(existing_imports)}"
+    
+    # If the from_statement doesn't match, return the original import line
+    return existing_import_line
+
+def modify_import_statement_to_double_dot(import_line):
+    """
+    Modify an import statement to use double-dot (..) instead of single-dot (.).
+    If the import statement already uses double-dot, it is left as-is.
+    
+    Args:
+        import_line (str): The import statement to be modified.
+        
+    Returns:
+        str: The modified import statement using double-dot, or the original line if it already uses double-dot.
+    """
+    if import_line.startswith("from .."):
+        return import_line
+    elif import_line.startswith("from .") and not import_line.startswith("from .."):
+        return f"from ..{import_line[6:]}"
+    elif import_line.startswith("import "):
+        return import_line
+    else:
+        return import_line

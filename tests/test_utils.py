@@ -1,14 +1,15 @@
 import pytest
 from django_create.utils import (
+    Utils,
     create_mock_django_app,
     inject_element_into_file,
     create_element_file,
     add_import_to_file,
-    render_template,
-    save_rendered_template,
     snake_case,
     extract_file_contents,
-    add_import
+    add_import,
+    merge_item_into_import, 
+    modify_import_statement_to_double_dot
 )
 
 def test_create_mock_django_app(tmp_path):
@@ -304,3 +305,37 @@ class SampleSerializer(serializers.ModelSerializer):
     assert "from rest_framework import serializers, viewsets" in content
     assert content.count("from .models import") == 1  # No duplicate imports
     assert content.count("User") == 1  # No duplicate model imports
+
+
+def test_merge_item_into_import_existing_item():
+    existing_import_line = "from ..models import User, Product"
+    item = "User"
+    from_statement = "from ..models import"
+    
+    updated_import_line = merge_item_into_import(existing_import_line, item, from_statement)
+    assert updated_import_line == "from ..models import User, Product"
+
+def test_merge_item_into_import_different_from_statement():
+    existing_import_line = "from ..serializers import UserSerializer, ProductSerializer"
+    item = "OrderSerializer"
+    from_statement = "from ..models import"
+    
+    updated_import_line = merge_item_into_import(existing_import_line, item, from_statement)
+    assert updated_import_line == "from ..serializers import UserSerializer, ProductSerializer"
+
+def test_modify_import_statement_to_double_dot():
+    # Test cases
+    test_cases = [
+        ("from .models import Product, User, SomeOtherModel", "from ..models import Product, User, SomeOtherModel"),
+        ("from ..models import Product, User, SomeOtherModel", "from ..models import Product, User, SomeOtherModel"),
+        ("import datetime", "import datetime"),
+        ("from models import Product", "from models import Product"),
+    ]
+
+    for input_line, expected_output in test_cases:
+        if isinstance(expected_output, type) and issubclass(expected_output, Exception):
+            with expected_output:
+                output = modify_import_statement_to_double_dot(input_line)
+        else:
+            output = modify_import_statement_to_double_dot(input_line)
+            assert output == expected_output

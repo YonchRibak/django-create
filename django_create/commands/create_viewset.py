@@ -8,7 +8,9 @@ from ..utils import (
     add_import_to_file,
     add_import,
     render_template,
-    is_import_in_file
+    modify_import_statement_to_double_dot,
+    merge_item_into_import, Utils
+    
 )
 
 @click.command(name='viewset')
@@ -52,6 +54,10 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
     if class_dict:
         if viewsets_py_path.exists():
             imports = class_dict.get("imports", "")
+            if imports:
+                import_lines = imports.split('\n')
+                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
+                imports = '\n'.join(modified_import_lines)
             viewset_content = class_dict.get(viewset_name, "")
             full_content = imports + "\n\n" + viewset_content
             inject_element_into_file(viewsets_py_path, full_content)
@@ -71,6 +77,10 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
             init_file_path = custom_viewset_path / '__init__.py'
 
             imports = class_dict.get("imports", "")
+            if imports:
+                import_lines = imports.split('\n')
+                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
+                imports = '\n'.join(modified_import_lines)
             viewset_content = class_dict.get(viewset_name, "")
             full_content = imports + "\n\n" + viewset_content
             create_element_file(viewset_file_path, full_content)
@@ -85,12 +95,37 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
     serializer_name = serializer or "EnterSerializer"
 
     if viewsets_py_path.exists():
-        # Add all required imports
-        add_import(viewsets_py_path, "from rest_framework import viewsets")
+        # Check if the required imports are already in the file
         if model:
-            add_import(viewsets_py_path, f"from ..models import {model}")
+            model_import_line = f"from ..models import {model}"
+            with open(viewsets_py_path, 'r') as f:
+                lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.startswith('from ..models'):
+                    if model not in line:
+                        merged_line = merge_item_into_import(line, model, 'from ..models')
+                        lines[i] = merged_line
+                        with open(viewsets_py_path, 'w') as f:
+                            f.writelines(lines)
+                else: 
+                    add_import(viewsets_py_path, model_import_line)
+
         if serializer:
-            add_import(viewsets_py_path, f"from ..serializers import {serializer}")
+            serializer_import_line = f"from ..serializers import {serializer}"
+            with open(viewsets_py_path, 'r') as f:
+                lines = f.readlines()
+       
+            for i, line in enumerate(lines):
+                if line.startswith('from ..serializers'):
+                    if serializer not in line:
+                        merged_line = merge_item_into_import(line, serializer, 'from ..serializers')
+                        lines[i] = merged_line
+                        with open(viewsets_py_path, 'w') as f:
+                            f.writelines(lines)
+                else:    
+                    add_import(viewsets_py_path, serializer_import_line)
+
+
 
         # Render and inject the viewset content without imports
         template_no_import = templates_path / 'viewset_template_no_import.txt'
@@ -102,6 +137,9 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
         )
         inject_element_into_file(viewsets_py_path, content)
     else:
+        # Create viewsets.py file with default content
+        viewsets_py_path.write_text("# Django REST Framework Viewsets\n\n")
+        
         # Create viewsets folder and files
         viewsets_folder_path.mkdir(parents=True, exist_ok=True)
 

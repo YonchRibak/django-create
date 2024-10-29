@@ -3,7 +3,7 @@ import pytest
 from click.testing import CliRunner
 from pathlib import Path
 from django_create.cli import cli
-from django_create.utils import create_mock_django_app, snake_case
+from django_create.utils import create_mock_django_app, snake_case, Utils
 
 def test_inject_into_serializers_py(tmp_path):
     # Create a mock Django app with serializers.py
@@ -131,7 +131,8 @@ def test_error_both_serializers_file_and_folder(tmp_path):
     assert "Both 'serializers.py' and 'serializers/' folder exist" in result.output
 
 
-def test_error_no_serializers_file_or_folder(tmp_path):
+def test_create_when_no_serializers_file_or_folder(tmp_path):
+    """Test that serializers.py is created when neither file nor folder exists."""
     # Create a mock Django app with neither serializers.py nor serializers folder
     app_path = create_mock_django_app(
         tmp_path,
@@ -139,21 +140,40 @@ def test_error_no_serializers_file_or_folder(tmp_path):
         with_serializers_file=False,
         with_serializers_folder=False
     )
+
+    # Check initial state
+    serializers_py_path = app_path / 'serializers.py'
+    serializers_folder_path = app_path / 'serializers'
+    assert not serializers_py_path.exists(), "serializers.py should not exist initially"
+    assert not serializers_folder_path.exists(), "serializers folder should not exist initially"
+
     runner = CliRunner()
     serializer_name = "SomeSerializer"
-
+    
     # Change the working directory to the mock environment's base
     os.chdir(tmp_path)
-
+    
     # Run the create_serializer command
     result = runner.invoke(cli, ['testapp', 'create', 'serializer', serializer_name])
 
-    # Print output for debugging
+    # Print debug information
+    print("\nCommand output:")
     print(result.output)
+    print("\nCreated file content:")
+    print(serializers_py_path.read_text())
 
-    # Verify that an error is raised about neither existing
-    assert result.exit_code != 0
-    assert "Neither 'serializers.py' nor 'serializers/' folder exists" in result.output
+    # Verify successful creation
+    assert result.exit_code == 0
+    assert f"Serializer '{serializer_name}' created successfully" in result.output
+
+    # Verify serializers.py was created
+    assert serializers_py_path.exists(), "serializers.py should be created"
+    assert not serializers_folder_path.exists(), "serializers folder should not be created"
+
+    # Verify content of created file
+    content = serializers_py_path.read_text()
+    assert Utils.DJANGO_IMPORTS['serializers'] in content
+    assert f"class {serializer_name}(serializers.ModelSerializer):" in content
 
 def test_inject_serializer_without_duplicate_import(tmp_path):
     # Create a mock Django app with serializers.py that already contains the serializers import
@@ -358,3 +378,74 @@ class UserSerializer(serializers.ModelSerializer):
     models_import_line = next(line for line in content.split('\n') if 'from .models import' in line)
     assert 'User' in models_import_line
     assert 'Product' in models_import_line
+
+def test_create_serializer_with_default_content(tmp_path):
+    """Test creating a serializer in a file that only contains Django's default content."""
+    # Create a mock Django app
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_serializers_file=True,
+        with_serializers_folder=False
+    )
+
+    # Write Django's default content to serializers.py
+    serializers_py_path = app_path / 'serializers.py'
+    default_content = f"{Utils.DJANGO_IMPORTS['serializers']}\n\n{Utils.DEFAULT_COMMENTS['serializers']}\n"
+    serializers_py_path.write_text(default_content)
+
+    # Run the create_serializer command
+    runner = CliRunner()
+    os.chdir(tmp_path)
+    serializer_name = "ProductSerializer"
+    result = runner.invoke(cli, ['testapp', 'create', 'serializer', serializer_name])
+
+    # Print debug information
+    print("\nInitial content:")
+    print(default_content)
+    print("\nCommand output:")
+    print(result.output)
+    print("\nFinal content:")
+    print(serializers_py_path.read_text())
+
+    # Verify command execution
+    assert result.exit_code == 0
+    assert f"Serializer '{serializer_name}' created successfully" in result.output
+
+    # Read the resulting content
+    content = serializers_py_path.read_text()
+
+    # Since it was default content, the file should be completely overwritten
+    assert content.count(Utils.DJANGO_IMPORTS['serializers']) == 1
+    assert Utils.DEFAULT_COMMENTS['serializers'] not in content
+    assert f"class {serializer_name}(serializers.ModelSerializer):" in content
+
+    # Add another serializer to the file
+    second_serializer = "OrderSerializer"
+    result = runner.invoke(cli, ['testapp', 'create', 'serializer', second_serializer])
+
+    # Verify second serializer was added correctly
+    content = serializers_py_path.read_text()
+    print("\nContent after second serializer:")
+    print(content)
+
+    # Now it should use injection since file has actual content
+    assert content.count(Utils.DJANGO_IMPORTS['serializers']) == 1  # Import still appears once
+    assert f"class {serializer_name}(serializers.ModelSerializer):" in content
+    assert f"class {second_serializer}(serializers.ModelSerializer):" in content
+
+    # Try creating a serializer in a file with non-default but no imports
+    non_default_content = "# Custom comment\n\nclass ExistingSerializer(serializers.ModelSerializer):\n    pass\n"
+    serializers_py_path.write_text(non_default_content)
+
+    third_serializer = "ThirdSerializer"
+    result = runner.invoke(cli, ['testapp', 'create', 'serializer', third_serializer])
+
+    # Verify third serializer was added with imports
+    content = serializers_py_path.read_text()
+    print("\nContent after third serializer with initial non-default content:")
+    print(content)
+
+    assert content.count(Utils.DJANGO_IMPORTS['serializers']) == 1
+    assert "class ExistingSerializer(serializers.ModelSerializer):" in content
+    assert f"class {third_serializer}(serializers.ModelSerializer):" in content
