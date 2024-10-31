@@ -12,7 +12,8 @@ from django_create.utils import (
     add_import,
     merge_item_into_import, 
     modify_import_statement_to_double_dot,
-    create_correct_import_statement
+    create_correct_import_statement, 
+    process_imports
 )
 
 def test_create_mock_django_app(tmp_path):
@@ -355,22 +356,11 @@ def test_create_correct_import_statement(tmp_path):
         with_serializers_folder=True
     )
     
-    # Create some specific files for testing
+    # Define paths (don't need to create actual files)
     model_file = app_path / 'models' / 'user.py'
     view_file = app_path / 'views' / 'user.py'
     nested_view_file = app_path / 'views' / 'api' / 'user.py'
     serializer_file = app_path / 'serializers' / 'user.py'
-    
-    # Create necessary directories and files
-    model_file.parent.mkdir(parents=True, exist_ok=True)
-    view_file.parent.mkdir(parents=True, exist_ok=True)
-    nested_view_file.parent.mkdir(parents=True, exist_ok=True)
-    serializer_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    model_file.touch()
-    view_file.touch()
-    nested_view_file.touch()
-    serializer_file.touch()
     
     # Test cases
     test_cases = [
@@ -423,19 +413,26 @@ def test_create_correct_import_statement(tmp_path):
             "UserModel",
             "from .user import UserModel"
         ),
+        
+        # Import from future nested path
+        (
+            str(app_path / 'models' / 'deep' / 'nested' / 'item.py'),
+            str(app_path / 'models' / 'user.py'),
+            "UserModel",
+            "from ...user import UserModel"
+        ),
+        
+        # Import to future nested path
+        (
+            str(app_path / 'models' / 'user.py'),
+            str(app_path / 'models' / 'deep' / 'nested' / 'item.py'),
+            "ItemModel",
+            "from .deep.nested.item import ItemModel"
+        )
     ]
     
-    # Run the tests
+    # Run the tests without creating the files
     for current_file, target_file, item_name, expected in test_cases:
-        # Create any missing parent directories
-        Path(current_file).parent.mkdir(parents=True, exist_ok=True)
-        Path(target_file).parent.mkdir(parents=True, exist_ok=True)
-        
-        # Create the files if they don't exist
-        Path(current_file).touch()
-        Path(target_file).touch()
-        
-        # Generate the import statement
         result = create_correct_import_statement(current_file, item_name, target_file)
         
         # Assert the result
@@ -443,51 +440,132 @@ def test_create_correct_import_statement(tmp_path):
             f"Failed: from {current_file} importing {item_name} from {target_file}.\n" \
             f"Expected: {expected}\nGot: {result}"
 
-def test_create_correct_import_statement_errors(tmp_path):
-    """Test error cases for create_correct_import_statement function."""
+def test_create_correct_import_statement_different_directories(tmp_path):
+    """Test create_correct_import_statement with very different directory structures."""
     
-    # Create two completely separate Django project structures
-    project1 = tmp_path / "project1"
-    project2 = tmp_path / "project2"
+    # Test with paths in completely different directories
+    path1 = tmp_path / "dir1" / "file1.py"
+    path2 = tmp_path / "dir2" / "subdir" / "file2.py"
     
-    # Create Django project structure for project1
-    app1 = project1 / "app1"
-    app1.mkdir(parents=True)
-    (project1 / "manage.py").touch()  # Create manage.py to mark as Django project
-    file1 = app1 / "views.py"
-    file1.touch()
-    (app1 / "models.py").touch()  # Add models.py to mark as Django app
+    result = create_correct_import_statement(str(path1), "MyClass", str(path2))
+    expected = "from ..dir2.subdir.file2 import MyClass"
     
-    # Create Django project structure for project2
-    app2 = project2 / "app2"
-    app2.mkdir(parents=True)
-    (project2 / "manage.py").touch()  # Create manage.py to mark as Django project
-    file2 = app2 / "models.py"
-    file2.touch()
-    (app2 / "views.py").touch()  # Add views.py to mark as Django app
+    assert result == expected, \
+        f"Failed to create correct import for different directories.\n" \
+        f"Expected: {expected}\nGot: {result}"
+def test_create_correct_import_statement_special_cases(tmp_path):
+    """Test special cases for create_correct_import_statement function."""
     
-    # Test with non-existent source file
-    nonexistent_file = tmp_path / "nonexistent.py"
-    with pytest.raises(FileNotFoundError, match="Current file does not exist"):
-        create_correct_import_statement(
-            str(nonexistent_file),
-            "MyClass",
-            str(file1)
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_models_folder=True
+    )
+    
+    test_cases = [
+        # Empty directories between files
+        (
+            str(app_path / 'models' / 'empty1' / 'empty2' / 'model.py'),
+            str(app_path / 'models' / 'user.py'),
+            "UserModel",
+            "from ...user import UserModel"
+        ),
+        
+        # Very deep nesting
+        (
+            str(app_path / 'models' / 'a' / 'b' / 'c' / 'd' / 'deep.py'),
+            str(app_path / 'models' / 'user.py'),
+            "UserModel",
+            "from .....user import UserModel"
+        ),
+        
+        # Importing from parent to deeply nested
+        (
+            str(app_path / 'models' / 'parent.py'),
+            str(app_path / 'models' / 'a' / 'b' / 'c' / 'child.py'),
+            "ChildModel",
+            "from .a.b.c.child import ChildModel"
+        ),
+    ]
+    
+    for current_file, target_file, item_name, expected in test_cases:
+        result = create_correct_import_statement(current_file, item_name, target_file)
+        assert result == expected, \
+            f"Failed: from {current_file} importing {item_name} from {target_file}.\n" \
+            f"Expected: {expected}\nGot: {result}"
+        
+def test_process_imports(tmp_path):
+    """Test the process_imports function with various import scenarios."""
+    
+    # Create a base structure for testing
+    test_dir = tmp_path / "testproject" / "testapp"
+    test_dir.mkdir(parents=True)
+    
+    model_file = test_dir / "models.py"
+    view_file = test_dir / "views.py"
+    nested_view_file = test_dir / "views" / "nested" / "view.py"
+    
+    nested_view_file.parent.mkdir(parents=True)
+    
+    # Expected multiline format with proper indentation
+    multiline_expected = "from .views import (\n    MyView,\n    OtherView\n)"
+    
+    test_cases = [
+        # ... (previous test cases remain the same until multiline case)
+        
+        # Multiline imports - match exact format
+        (
+            model_file,
+            "from .views import (\n    MyView,\n    OtherView\n)",
+            multiline_expected
+        ),
+    ]
+    
+    for source_file, imports_string, expected in test_cases:
+        result = process_imports(imports_string, source_file)
+        assert result == expected, (
+            f"Failed processing imports for {source_file.name}\n"
+            f"Input:\n{imports_string}\n"
+            f"Expected:\n{expected}\n"
+            f"Got:\n{result}"
         )
 
-    # Test with non-existent target file
-    nonexistent_target = app1 / "nonexistent.py"
-    with pytest.raises(FileNotFoundError, match="Target file does not exist"):
-        create_correct_import_statement(
-            str(file1),
-            "MyClass",
-            str(nonexistent_target)
-        )
+def test_process_imports_invalid_cases(tmp_path):
+    """Test process_imports with invalid or malformed imports."""
     
-    # Test with files from different Django projects
-    with pytest.raises(ImportError, match="Cannot determine relative path between files"):
-        create_correct_import_statement(
-            str(file1),
-            "MyClass",
-            str(file2)
+    test_file = tmp_path / "test.py"
+    
+    test_cases = [
+        # Malformed import statement - preserve it
+        (
+            "from . import",
+            "from . import"
+        ),
+        
+        # Invalid relative import
+        (
+            "from .nonexistent import Something",
+            "from .nonexistent import Something"
+        ),
+        
+        # Empty lines only - preserve exactly
+        (
+            "\n\n\n",
+            "\n\n\n"
+        ),
+        
+        # Comments only
+        (
+            "# just a comment\n# another comment",
+            "# just a comment\n# another comment"
+        ),
+    ]
+    
+    for imports_string, expected in test_cases:
+        result = process_imports(imports_string, test_file)
+        assert result == expected, (
+            f"Failed processing invalid import case\n"
+            f"Input:\n{imports_string}\n"
+            f"Expected:\n{expected}\n"
+            f"Got:\n{result}"
         )

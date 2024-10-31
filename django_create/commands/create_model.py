@@ -9,9 +9,8 @@ from ..utils import (
     add_import_to_file,
     render_template,
     is_import_in_file,
-    modify_import_statement_to_double_dot
+    process_imports
 )
-
 @click.command(name='model')
 @click.argument('model_name')
 @click.option('--path', default=None, help="Subdirectory path inside the models folder.")
@@ -58,9 +57,8 @@ def create_model(ctx, model_name, path):
         if models_py_path.exists():
             imports = class_dict.get("imports", "")
             if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
+                # Process imports relative to models.py
+                imports = process_imports(imports, models_py_path)
             model_content = class_dict.get(model_name, "")
             full_content = imports + "\n\n" + model_content
             inject_element_into_file(models_py_path, full_content)
@@ -74,9 +72,8 @@ def create_model(ctx, model_name, path):
 
             imports = class_dict.get("imports", "")
             if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
+                # Process imports relative to the new model file
+                imports = process_imports(imports, model_file_path)
             model_content = class_dict.get(model_name, "")
             full_content = imports + "\n\n" + model_content
             create_element_file(model_file_path, full_content)

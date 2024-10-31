@@ -469,72 +469,134 @@ def modify_import_statement_to_double_dot(import_line):
 def create_correct_import_statement(current_file_path, item_to_import_name, item_to_import_path):
     """
     Create the correct relative import statement based on file locations.
+    Works with both existing and future file paths.
     
     Args:
-        current_file_path: Path to the current file needing the import
+        current_file_path: Path to the current/future file needing the import
         item_to_import_name: Name of the item to import (e.g., 'UserModel', 'UserView')
-        item_to_import_path: Full path to the file containing the item
+        item_to_import_path: Full path to the file containing/will contain the item
         
     Returns:
         str: Properly formatted import statement
-        
-    Raises:
-        FileNotFoundError: If either current_file_path or item_to_import_path doesn't exist
-        ImportError: If files are not in the same Django project structure
     """
-    # Validate file existence
-    current = Path(current_file_path)
-    target = Path(item_to_import_path)
+    # Convert paths to Path objects
+    current = Path(current_file_path).resolve()
+    target = Path(item_to_import_path).resolve()
     
-    if not current.exists():
-        raise FileNotFoundError(f"Current file does not exist: {current_file_path}")
-    if not target.exists():
-        raise FileNotFoundError(f"Target file does not exist: {item_to_import_path}")
+    # Get parents as a list for both paths
+    current_parts = current.parent.parts
+    target_parts = target.parent.parts
     
-    # Resolve paths
-    current = current.resolve()
-    target = target.resolve()
+    # Find common prefix
+    common_prefix_len = 0
+    for c, t in zip(current_parts, target_parts):
+        if c != t:
+            break
+        common_prefix_len += 1
     
-    # Find the Django project root (look for manage.py or app directories)
-    def find_project_root(path):
-        original_path = path
-        while path != path.parent:
-            if (path / 'manage.py').exists():
-                return path
-            # Check if we're in a Django app (look for typical Django files/dirs)
-            app_indicators = ['models.py', 'views.py', 'apps.py', 'migrations']
-            if any((path / indicator).exists() for indicator in app_indicators):
-                # Go up one more level as we might be inside an app directory
-                return path.parent
-            path = path.parent
-        return None
-
-    current_root = find_project_root(current.parent)
-    target_root = find_project_root(target.parent)
-
-    # Ensure both files are in the same Django project structure
-    if not current_root or not target_root or current_root != target_root:
-        raise ImportError("Cannot determine relative path between files: not in the same Django project structure")
-
-    # Get the relative path from current file to target file
-    relative = os.path.relpath(target.parent, current.parent)
+    # Calculate dots needed (how many levels to go up)
+    dots = len(current_parts) - common_prefix_len
     
-    # Convert Windows paths to forward slashes
-    relative = relative.replace('\\', '/')
-    
-    # Count how many levels we need to go up
-    dots = relative.count('../')
-    
-    # Remove any leading '../' and replace remaining path separators with dots
-    import_path = relative.replace('../', '').replace('/', '.')
+    # Get the import path parts (after going up)
+    import_path_parts = target_parts[common_prefix_len:]
     
     # If we're in the same directory
-    if relative == '.':
+    if dots == 0 and not import_path_parts:
         return f"from .{target.stem} import {item_to_import_name}"
+    
+    # If we need to go up and/or across
+    prefix = '.' * (dots + 1)  # +1 because we always need at least one dot
+    suffix = '.'.join(import_path_parts + (target.stem,))
+    
+    return f"from {prefix}{suffix} import {item_to_import_name}"
+
+def process_imports(imports_string, source_file_path):
+    """
+    Process import statements, adjusting relative imports while preserving format.
+    
+    Args:
+        imports_string: String containing import statements
+        source_file_path: Path to the file that will contain these imports
         
-    # If we need to go up directories
-    if dots > 0:
-        return f"from {'.' * (dots + 1)}{import_path}.{target.stem} import {item_to_import_name}"
+    Returns:
+        str: Processed import statements with correct relative paths
+    """
+    if not imports_string:
+        return ""
         
-    # If we're going into subdirectories
-    return f"from .{import_path}.{target.stem} import {item_to_import_name}"
+    # Split but preserve all newlines
+    import_lines = imports_string.split('\n')
+    processed_lines = []
+    
+    i = 0
+    while i < len(import_lines):
+        line = import_lines[i]
+        
+        # Preserve empty lines exactly
+        if not line.strip():
+            processed_lines.append(line)
+            i += 1
+            continue
+            
+        # Preserve comments exactly
+        if line.strip().startswith('#'):
+            processed_lines.append(line)
+            i += 1
+            continue
+            
+        # Check if this is a multiline import
+        if '(' in line and ')' not in line:
+            # Collect all lines until we find the closing parenthesis
+            full_import = [line]
+            i += 1
+            while i < len(import_lines) and ')' not in import_lines[i]:
+                full_import.append(import_lines[i])
+                i += 1
+            if i < len(import_lines):  # Add the line with closing parenthesis
+                full_import.append(import_lines[i])
+            
+            # Process the multiline import
+            if line.strip().startswith('from .'):
+                try:
+                    module_path = line.split(' import ')[0].replace('from .', '').replace('from ..', '')
+                    target_file = Path(source_file_path).parent / f"{module_path}.py"
+                    new_base = create_correct_import_statement(
+                        str(source_file_path),
+                        "placeholder",
+                        str(target_file)
+                    ).replace("import placeholder", "import (")
+                    processed_lines.extend([new_base] + full_import[1:])
+                except Exception:
+                    processed_lines.extend(full_import)
+            else:
+                processed_lines.extend(full_import)
+            i += 1
+            continue
+            
+        # Single line import
+        if line.strip().startswith('from .'):
+            try:
+                parts = line.strip().split(' import ')
+                if len(parts) == 2:
+                    module_path = parts[0].replace('from .', '').replace('from ..', '')
+                    items = parts[1].strip()
+                    
+                    target_file = Path(source_file_path).parent / f"{module_path}.py"
+                    new_import = create_correct_import_statement(
+                        str(source_file_path),
+                        "placeholder",
+                        str(target_file)
+                    )
+                    processed_lines.append(
+                        new_import.replace("import placeholder", f"import {items}")
+                    )
+                else:
+                    processed_lines.append(' '.join(line.split()))
+            except Exception:
+                processed_lines.append(' '.join(line.split()))
+        else:
+            # Regular import - just normalize whitespace
+            processed_lines.append(' '.join(line.split()))
+        i += 1
+            
+    return '\n'.join(processed_lines)
