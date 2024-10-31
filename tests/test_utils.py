@@ -1,4 +1,6 @@
 import pytest
+import os
+from pathlib import Path
 from django_create.utils import (
     Utils,
     create_mock_django_app,
@@ -9,7 +11,8 @@ from django_create.utils import (
     extract_file_contents,
     add_import,
     merge_item_into_import, 
-    modify_import_statement_to_double_dot
+    modify_import_statement_to_double_dot,
+    create_correct_import_statement
 )
 
 def test_create_mock_django_app(tmp_path):
@@ -339,3 +342,152 @@ def test_modify_import_statement_to_double_dot():
         else:
             output = modify_import_statement_to_double_dot(input_line)
             assert output == expected_output
+
+def test_create_correct_import_statement(tmp_path):
+    """Test the create_correct_import_statement function with various file structures."""
+    
+    # Create a mock Django app with a specific structure
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_models_folder=True,
+        with_views_folder=True,
+        with_serializers_folder=True
+    )
+    
+    # Create some specific files for testing
+    model_file = app_path / 'models' / 'user.py'
+    view_file = app_path / 'views' / 'user.py'
+    nested_view_file = app_path / 'views' / 'api' / 'user.py'
+    serializer_file = app_path / 'serializers' / 'user.py'
+    
+    # Create necessary directories and files
+    model_file.parent.mkdir(parents=True, exist_ok=True)
+    view_file.parent.mkdir(parents=True, exist_ok=True)
+    nested_view_file.parent.mkdir(parents=True, exist_ok=True)
+    serializer_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    model_file.touch()
+    view_file.touch()
+    nested_view_file.touch()
+    serializer_file.touch()
+    
+    # Test cases
+    test_cases = [
+        # Format: current_file, target_file, item_name, expected_import
+        
+        # From view to model (up one, into models)
+        (
+            str(view_file),
+            str(model_file),
+            "UserModel",
+            "from ..models.user import UserModel"
+        ),
+        
+        # From nested view to model (up two, into models)
+        (
+            str(nested_view_file),
+            str(model_file),
+            "UserModel",
+            "from ...models.user import UserModel"
+        ),
+        
+        # From model to view (up one, into views)
+        (
+            str(model_file),
+            str(view_file),
+            "UserView",
+            "from ..views.user import UserView"
+        ),
+        
+        # From model to nested view (up one, into views/api)
+        (
+            str(model_file),
+            str(nested_view_file),
+            "UserApiView",
+            "from ..views.api.user import UserApiView"
+        ),
+        
+        # From serializer to model (up one, into models)
+        (
+            str(serializer_file),
+            str(model_file),
+            "UserModel",
+            "from ..models.user import UserModel"
+        ),
+        
+        # Same directory import
+        (
+            str(app_path / 'models' / 'product.py'),
+            str(app_path / 'models' / 'user.py'),
+            "UserModel",
+            "from .user import UserModel"
+        ),
+    ]
+    
+    # Run the tests
+    for current_file, target_file, item_name, expected in test_cases:
+        # Create any missing parent directories
+        Path(current_file).parent.mkdir(parents=True, exist_ok=True)
+        Path(target_file).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create the files if they don't exist
+        Path(current_file).touch()
+        Path(target_file).touch()
+        
+        # Generate the import statement
+        result = create_correct_import_statement(current_file, item_name, target_file)
+        
+        # Assert the result
+        assert result == expected, \
+            f"Failed: from {current_file} importing {item_name} from {target_file}.\n" \
+            f"Expected: {expected}\nGot: {result}"
+
+def test_create_correct_import_statement_errors(tmp_path):
+    """Test error cases for create_correct_import_statement function."""
+    
+    # Create two completely separate Django project structures
+    project1 = tmp_path / "project1"
+    project2 = tmp_path / "project2"
+    
+    # Create Django project structure for project1
+    app1 = project1 / "app1"
+    app1.mkdir(parents=True)
+    (project1 / "manage.py").touch()  # Create manage.py to mark as Django project
+    file1 = app1 / "views.py"
+    file1.touch()
+    (app1 / "models.py").touch()  # Add models.py to mark as Django app
+    
+    # Create Django project structure for project2
+    app2 = project2 / "app2"
+    app2.mkdir(parents=True)
+    (project2 / "manage.py").touch()  # Create manage.py to mark as Django project
+    file2 = app2 / "models.py"
+    file2.touch()
+    (app2 / "views.py").touch()  # Add views.py to mark as Django app
+    
+    # Test with non-existent source file
+    nonexistent_file = tmp_path / "nonexistent.py"
+    with pytest.raises(FileNotFoundError, match="Current file does not exist"):
+        create_correct_import_statement(
+            str(nonexistent_file),
+            "MyClass",
+            str(file1)
+        )
+
+    # Test with non-existent target file
+    nonexistent_target = app1 / "nonexistent.py"
+    with pytest.raises(FileNotFoundError, match="Target file does not exist"):
+        create_correct_import_statement(
+            str(file1),
+            "MyClass",
+            str(nonexistent_target)
+        )
+    
+    # Test with files from different Django projects
+    with pytest.raises(ImportError, match="Cannot determine relative path between files"):
+        create_correct_import_statement(
+            str(file1),
+            "MyClass",
+            str(file2)
+        )

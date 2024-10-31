@@ -465,3 +465,76 @@ def modify_import_statement_to_double_dot(import_line):
         return import_line
     else:
         return import_line
+    
+def create_correct_import_statement(current_file_path, item_to_import_name, item_to_import_path):
+    """
+    Create the correct relative import statement based on file locations.
+    
+    Args:
+        current_file_path: Path to the current file needing the import
+        item_to_import_name: Name of the item to import (e.g., 'UserModel', 'UserView')
+        item_to_import_path: Full path to the file containing the item
+        
+    Returns:
+        str: Properly formatted import statement
+        
+    Raises:
+        FileNotFoundError: If either current_file_path or item_to_import_path doesn't exist
+        ImportError: If files are not in the same Django project structure
+    """
+    # Validate file existence
+    current = Path(current_file_path)
+    target = Path(item_to_import_path)
+    
+    if not current.exists():
+        raise FileNotFoundError(f"Current file does not exist: {current_file_path}")
+    if not target.exists():
+        raise FileNotFoundError(f"Target file does not exist: {item_to_import_path}")
+    
+    # Resolve paths
+    current = current.resolve()
+    target = target.resolve()
+    
+    # Find the Django project root (look for manage.py or app directories)
+    def find_project_root(path):
+        original_path = path
+        while path != path.parent:
+            if (path / 'manage.py').exists():
+                return path
+            # Check if we're in a Django app (look for typical Django files/dirs)
+            app_indicators = ['models.py', 'views.py', 'apps.py', 'migrations']
+            if any((path / indicator).exists() for indicator in app_indicators):
+                # Go up one more level as we might be inside an app directory
+                return path.parent
+            path = path.parent
+        return None
+
+    current_root = find_project_root(current.parent)
+    target_root = find_project_root(target.parent)
+
+    # Ensure both files are in the same Django project structure
+    if not current_root or not target_root or current_root != target_root:
+        raise ImportError("Cannot determine relative path between files: not in the same Django project structure")
+
+    # Get the relative path from current file to target file
+    relative = os.path.relpath(target.parent, current.parent)
+    
+    # Convert Windows paths to forward slashes
+    relative = relative.replace('\\', '/')
+    
+    # Count how many levels we need to go up
+    dots = relative.count('../')
+    
+    # Remove any leading '../' and replace remaining path separators with dots
+    import_path = relative.replace('../', '').replace('/', '.')
+    
+    # If we're in the same directory
+    if relative == '.':
+        return f"from .{target.stem} import {item_to_import_name}"
+        
+    # If we need to go up directories
+    if dots > 0:
+        return f"from {'.' * (dots + 1)}{import_path}.{target.stem} import {item_to_import_name}"
+        
+    # If we're going into subdirectories
+    return f"from .{import_path}.{target.stem} import {item_to_import_name}"
