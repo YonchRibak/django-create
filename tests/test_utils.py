@@ -13,7 +13,10 @@ from django_create.utils import (
     merge_item_into_import, 
     modify_import_statement_to_double_dot,
     create_correct_import_statement, 
-    process_imports
+    process_imports,
+    update_template_imports,
+    determine_import_path,
+    format_import_statement
 )
 
 def test_create_mock_django_app(tmp_path):
@@ -569,3 +572,216 @@ def test_process_imports_invalid_cases(tmp_path):
             f"Expected:\n{expected}\n"
             f"Got:\n{result}"
         )
+
+def test_is_default_content_various_formats(tmp_path):
+    """Test is_default_content with various content formats."""
+    test_file = tmp_path / "test.py"
+
+    # Test cases with content and expected result
+    test_cases = [
+        # Default models.py content in standard format
+        (
+            'models',
+            'from django.db import models\n\n# Create your models here\n',
+            True
+        ),
+        # Default content with different ordering
+        (
+            'models',
+            '# Create your models here\nfrom django.db import models\n',
+            True
+        ),
+        # Default content with extra whitespace
+        (
+            'models',
+            'from django.db import models\n\n\n# Create your models here\n\n',
+            True
+        ),
+        # Content with actual model - should return False
+        (
+            'models',
+            'from django.db import models\n\nclass MyModel(models.Model):\n    pass\n',
+            False
+        ),
+        # Empty file - should return False
+        (
+            'models',
+            '',
+            False
+        ),
+        # Just the import - should return False
+        (
+            'models',
+            'from django.db import models\n',
+            False
+        ),
+        # Default views.py content
+        (
+            'views',
+            'from django.views import View\n\n# Create your views here\n',
+            True
+        ),
+        # Views with actual view - should return False
+        (
+            'views',
+            'from django.views import View\n\nclass MyView(View):\n    pass\n',
+            False
+        ),
+    ]
+
+    # Run test cases
+    for file_type, content, expected_result in test_cases:
+        # Write content to test file
+        test_file.write_text(content)
+        
+        # Check if is_default_content gives expected result
+        result = Utils.is_default_content(test_file, file_type)
+        
+        assert result == expected_result, (
+            f"Failed for file_type={file_type}\n"
+            f"Content:\n{content}\n"
+            f"Expected: {expected_result}, Got: {result}"
+        )
+
+def test_determine_import_path(tmp_path):
+    """Test determine_import_path function for various app structures."""
+    app_path = tmp_path / "testapp"
+    app_path.mkdir()
+
+    # Test standard modules always use dotdot style
+    import_style, has_folder = determine_import_path(app_path, "models", is_folderizing=False)
+    assert import_style == "dotdot", "Standard modules should always use dotdot style"
+    assert has_folder is True, "Standard modules should indicate folder structure"
+
+    # Test external imports use direct style
+    import_style, has_folder = determine_import_path(app_path, "django.db", is_folderizing=False)
+    assert import_style == "direct", "External imports should use direct style"
+    assert has_folder is False, "External imports should not indicate folder structure"
+
+    # Test folderize mode enforces dotdot style
+    import_style, has_folder = determine_import_path(app_path, "serializers", is_folderizing=True)
+    assert import_style == "dotdot", "Folderize mode should enforce dotdot style"
+    assert has_folder is True, "Folderize mode should indicate folder structure"
+
+def test_format_import_statement():
+    """Test format_import_statement function for different imports."""
+    # Test standard module imports
+    result = format_import_statement("models", "User", "dotdot")
+    assert result == "from ..models import User", "Standard module should use parent directory import"
+
+    # Test multiple imports
+    result = format_import_statement("models", ["User", "Profile"], "dotdot")
+    assert result == "from ..models import User, Profile", "Multiple items should be comma-separated"
+
+    # Test external imports
+    result = format_import_statement("django.db", "models", "direct")
+    assert result == "from django.db import models", "External imports should use direct style"
+
+    # Test edge cases
+    result = format_import_statement("models", None, "dotdot")
+    assert result == "from ..models import None", "None should be converted to string"
+
+    result = format_import_statement("models", [], "dotdot")
+    assert result == "from ..models import ", "Empty list should result in empty import"
+
+def test_update_template_imports_standard_modules(tmp_path):
+    """Test update_template_imports with standard module imports."""
+    app_path = tmp_path / "testapp"
+    app_path.mkdir()
+
+    template = """from .models import User
+from .models.profile import Profile
+from .serializers import UserSerializer"""
+
+    result = update_template_imports(template, app_path, is_folderizing=True)
+
+    assert "from ..models import User" in result, "Should convert simple import to package import"
+    assert "from ..models import Profile" in result, "Should convert nested import to package import"
+    assert "from ..serializers import UserSerializer" in result, "Should convert serializer import to package import"
+
+def test_update_template_imports_with_comments(tmp_path):
+    """Test update_template_imports preserves comments."""
+    app_path = tmp_path / "testapp"
+    app_path.mkdir()
+
+    template = """from django.db import models  # Django import
+from .models import User  # User model
+from .serializers.user import UserSerializer  # Serializer"""
+
+    result = update_template_imports(template, app_path, is_folderizing=True)
+
+    # Check content separately from comments
+    assert "from django.db import models" in result, "Should preserve external import"
+    assert "# Django import" in result, "Should preserve external import comment"
+    assert "from ..models import User" in result, "Should convert to package import"
+    assert "# User model" in result, "Should preserve model comment"
+    assert "from ..serializers import UserSerializer" in result, "Should convert nested import to package import"
+    assert "# Serializer" in result, "Should preserve serializer comment"
+
+def test_update_template_imports_multiple_imports(tmp_path):
+    """Test update_template_imports with multiple imports from same module."""
+    app_path = tmp_path / "testapp"
+    app_path.mkdir()
+
+    template = """# Models
+from .models import User, Profile
+from .models.nested import NestedModel"""
+
+    result = update_template_imports(template, app_path, is_folderizing=True)
+
+    assert "# Models" in result, "Should preserve section comment"
+    assert "from ..models import User, Profile" in result, "Should preserve multiple imports in one line"
+    assert "from ..models import NestedModel" in result, "Should convert nested import to package import"
+
+def test_update_template_imports_invalid_inputs(tmp_path):
+    """Test update_template_imports with invalid inputs."""
+    app_path = tmp_path / "testapp"
+    app_path.mkdir()
+
+    # Test None input
+    assert update_template_imports(None, app_path) is None, "None input should return None"
+
+    # Test empty string
+    assert update_template_imports("", app_path) == "", "Empty string should return empty string"
+
+    # Test invalid imports
+    template = """from . import
+from .models import
+import from models"""
+    result = update_template_imports(template, app_path)
+    assert result == template, "Invalid imports should remain unchanged"
+
+def test_update_template_imports_non_standard_content(tmp_path):
+    """Test update_template_imports with non-import content."""
+    app_path = tmp_path / "testapp"
+    app_path.mkdir()
+
+    template = """def some_function():
+    pass
+
+class SomeClass:
+    pass"""
+
+    result = update_template_imports(template, app_path)
+    assert result == template, "Non-import content should remain unchanged"
+
+def test_update_template_imports_mixed_content(tmp_path):
+    """Test update_template_imports with mix of imports and other content."""
+    app_path = tmp_path / "testapp"
+    app_path.mkdir()
+
+    template = """from .models import User  # User model
+
+class UserClass:
+    def __init__(self):
+        pass  # Empty init
+
+from .serializers import UserSerializer"""
+
+    result = update_template_imports(template, app_path, is_folderizing=True)
+
+    assert "from ..models import User" in result, "Should convert first import"
+    assert "# User model" in result, "Should preserve first comment"
+    assert "class UserClass:" in result, "Should preserve class definition"
+    assert "pass  # Empty init" in result, "Should preserve inline comments in code"
+    assert "from ..serializers import UserSerializer" in result, "Should convert second import"

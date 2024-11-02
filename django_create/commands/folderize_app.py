@@ -3,7 +3,7 @@ import os
 import re
 from pathlib import Path
 from click.testing import CliRunner
-from ..utils import extract_file_contents, find_app_path, contains_class_definition
+from ..utils import extract_file_contents, find_app_path, contains_class_definition, update_template_imports
 from ..commands import create_model, create_view, create_viewset, create_test, create_serializer
 
 @click.command()
@@ -41,7 +41,6 @@ def folderize(ctx):
         else:
             click.echo(f"Warning: File '{file_name}' not found, skipping...")
 
-
     # Create required folders for folderizing
     for folder_name in folders_to_create:
         folder_path = os.path.join(base_path, folder_name)
@@ -51,10 +50,8 @@ def folderize(ctx):
             with open(init_file, 'w') as f:
                 f.write("# This file allows the directory to be treated as a Python module.\n")
 
-
     # Process extracted classes for each file
     for file_name, class_dict in extracted_classes.items():
-    
         command_args = []
         if 'model' in file_name:
             command = create_model
@@ -75,32 +72,38 @@ def folderize(ctx):
         elif 'serializer' in file_name:
             command = create_serializer
             command_args = ['create', 'serializer']
-
         else:
             print(f"No matching command for {file_name}")
             continue
 
-        # Extract imports
+        # Extract imports and process them with the new import handling
         imports = class_dict.get("imports", "")
+        if imports:
+            # Update imports considering we're in folderize mode
+            imports = update_template_imports(imports, Path(base_path), is_folderizing=True)
 
         # Process each class (excluding the "imports" key)
-
         for class_name in [k for k in class_dict.keys() if k != "imports"]:
             try:
-        
+                # Get the class content and process its imports
+                class_content = class_dict[class_name]
+                processed_content = update_template_imports(class_content, Path(base_path), is_folderizing=True)
+
+                # Create a new class_dict with processed imports and content
+                processed_class_dict = {
+                    "imports": imports,
+                    class_name: processed_content
+                }
+
                 # Create a new runner for each command
                 runner = CliRunner()
                 
                 # Prepare the context object
                 obj = {
                     'app_name': app_name,
-                    'class_dict': {
-                        "imports": imports,
-                        class_name: class_dict[class_name]
-                    }
+                    'class_dict': processed_class_dict
                 }
-                
-                
+
                 # Run the command using the runner
                 result = runner.invoke(
                     command,
@@ -112,7 +115,6 @@ def folderize(ctx):
                 if result.exit_code != 0:
                     click.echo(f"Failed to create {class_name}: {result.output}")
                     return 1
-
                 
             except Exception as e:
                 click.echo(f"Error creating {class_name}: {str(e)}")

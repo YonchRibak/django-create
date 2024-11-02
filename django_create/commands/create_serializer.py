@@ -9,7 +9,7 @@ from ..utils import (
     add_import_to_file,
     add_import,
     render_template,
-    is_import_in_file,
+    update_template_imports,
     modify_import_statement_to_double_dot,
     merge_item_into_import
     )
@@ -104,6 +104,7 @@ def create_serializer(ctx, serializer_name, path, model):
             # If only default content exists, overwrite the file
             template = templates_path / 'serializer_template.txt'
             content = render_template(template, serializer_name=serializer_name, model_name=model_name)
+            content = update_template_imports(content, app_path)
             with open(serializers_py_path, 'w') as f:
                 f.write(content)
         else:
@@ -125,6 +126,7 @@ def create_serializer(ctx, serializer_name, path, model):
             # Render and inject the serializer content without imports
             template_no_import = templates_path / 'serializer_template_no_import.txt'
             content = render_template(template_no_import, serializer_name=serializer_name, model_name=model_name)
+            content = update_template_imports(content, app_path)
             inject_element_into_file(serializers_py_path, content)
 
     elif serializers_folder_path.exists() and not serializers_py_path.exists():
@@ -142,12 +144,14 @@ def create_serializer(ctx, serializer_name, path, model):
         # Create the serializer file with full template
         template = templates_path / 'serializer_template.txt'
         content = render_template(template, serializer_name=serializer_name, model_name=model_name)
+        content = update_template_imports(content, app_path)
         create_element_file(serializer_file_path, content)
         add_import_to_file(init_file_path, serializer_name, serializer_file_name)
     else:
         # Neither exists, create serializers.py by default
         template = templates_path / 'serializer_template.txt'
         content = render_template(template, serializer_name=serializer_name, model_name=model_name)
+        content = update_template_imports(content, app_path)
         with open(serializers_py_path, 'w') as f:
             f.write(content)
 

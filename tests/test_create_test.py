@@ -252,3 +252,73 @@ def test_create_test_with_default_content(tmp_path):
     assert test_file_path.exists(), f"Expected test file at {test_file_path}"
     content = test_file_path.read_text()
     assert f"class {folder_test_name}(TestCase):" in content
+
+def test_create_test_with_default_content(tmp_path):
+    """Test creating a test in a file that only contains Django's default content."""
+    # Create a mock Django app
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_tests_file=True,
+        with_tests_folder=False
+    )
+
+    # Write Django's default content to tests.py
+    tests_py_path = app_path / 'tests.py'
+    default_content = f"{Utils.DJANGO_IMPORTS['tests']}\n\n{Utils.DEFAULT_COMMENTS['tests']}\n"
+    tests_py_path.write_text(default_content)
+
+    # Run the create_test command
+    runner = CliRunner()
+    os.chdir(tmp_path)
+    test_name = "ProductTest"
+    result = runner.invoke(cli, ['testapp', 'create', 'test', test_name])
+
+    # Print debug information
+    print("\nInitial content:")
+    print(default_content)
+    print("\nCommand output:")
+    print(result.output)
+    print("\nFinal content:")
+    print(tests_py_path.read_text())
+
+    # Verify command execution
+    assert result.exit_code == 0
+    assert f"test '{test_name}' created successfully" in result.output
+
+    # Read the resulting content
+    content = tests_py_path.read_text()
+
+    # Since it was default content, the file should be completely overwritten
+    assert content.count(Utils.DJANGO_IMPORTS['tests']) == 1
+    assert Utils.DEFAULT_COMMENTS['tests'] not in content
+    assert f"class {test_name}(TestCase):" in content
+
+    # Add another test to the file
+    second_test = "OrderTest"
+    result = runner.invoke(cli, ['testapp', 'create', 'test', second_test])
+
+    # Verify second test was added correctly
+    content = tests_py_path.read_text()
+    print("\nContent after second test:")
+    print(content)
+
+    # Now it should use injection since file has actual content
+    assert content.count(Utils.DJANGO_IMPORTS['tests']) == 1  # Import still appears once
+    assert f"class {test_name}(TestCase):" in content
+    assert f"class {second_test}(TestCase):" in content
+
+    # Check file naming in tests folder case
+    tests_folder_path = app_path / 'tests'
+    tests_folder_path.mkdir()
+    tests_py_path.unlink()  # Remove tests.py
+
+    # Create a test in the folder
+    folder_test_name = "CategoryTest"
+    result = runner.invoke(cli, ['testapp', 'create', 'test', folder_test_name])
+
+    # Verify file naming
+    test_file_path = tests_folder_path / f"test_{snake_case(folder_test_name)}.py"
+    assert test_file_path.exists(), f"Expected test file at {test_file_path}"
+    content = test_file_path.read_text()
+    assert f"class {folder_test_name}(TestCase):" in content

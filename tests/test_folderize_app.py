@@ -42,35 +42,6 @@ def test_folderize_creates_folders_and_removes_files(tmp_path):
     assert (app_path / 'views' / '__init__.py').exists()
     assert (app_path / 'tests' / '__init__.py').exists()
 
-# def test_folderize_aborts_if_files_have_class_definitions(tmp_path):
-#     # Create a mock Django app with models.py containing a class definition
-#     app_path = create_mock_django_app(
-#         tmp_path,
-#         app_name='testapp',
-#         with_models_file=True,
-#         with_views_file=True,
-#         with_tests_file=True
-#     )
-    
-#     # Write a class definition into models.py
-#     models_py_path = app_path / 'models.py'
-#     models_py_path.write_text("class TestModel:\n    pass\n")
-
-#     # Run the folderize command
-#     runner = CliRunner()
-#     os.chdir(tmp_path)
-#     result = runner.invoke(folderize, obj={'app_name': 'testapp'})
-
-#     # Print output for debugging
-#     print(result.output)
-
-#     # Verify that the command aborted with a warning
-#     assert result.exit_code == 0
-#     assert "Warning: 'models.py' contains class definitions. Aborting to prevent data loss." in result.output
-
-#     # Verify that the files have not been removed and no folders have been created
-#     assert models_py_path.exists()
-#     assert not (app_path / 'models' / '__init__.py').exists()
 
 def test_folderize_aborts_if_app_does_not_exist(tmp_path):
     # Run the folderize command on a non-existent app
@@ -162,36 +133,6 @@ def test_folderize_creates_folders_and_removes_files_in_subdirectory(tmp_path):
     assert (app_path / 'views' / '__init__.py').exists()
     assert (app_path / 'tests' / '__init__.py').exists()
 
-# def test_folderize_aborts_if_app_in_subdirectory_contains_class_definitions(tmp_path):
-#     # Create a mock Django app with models.py containing a class definition in a subdirectory
-#     app_path = create_mock_django_app(
-#         tmp_path,
-#         app_name='testapp',
-#         with_models_file=True,
-#         with_views_file=True,
-#         with_tests_file=True,
-#         subdirectory='subdir'
-#     )
-    
-#     # Write a class definition into models.py
-#     models_py_path = app_path / 'models.py'
-#     models_py_path.write_text("class TestModel:\n    pass\n")
-
-#     # Run the folderize command
-#     runner = CliRunner()
-#     os.chdir(tmp_path)
-#     result = runner.invoke(folderize, obj={'app_name': 'testapp'})
-
-#     # Print output for debugging
-#     print(result.output)
-
-#     # Verify that the command aborted with a warning
-#     assert result.exit_code == 0
-#     assert "Warning: 'models.py' contains class definitions. Aborting to prevent data loss." in result.output
-
-#     # Verify that the files have not been removed and no folders have been created
-#     assert models_py_path.exists()
-#     assert not (app_path / 'models' / '__init__.py').exists()
 
 def test_folderize_aborts_if_app_in_subdirectory_does_not_exist(tmp_path):
     # Run the folderize command on a non-existent app in a subdirectory
@@ -302,7 +243,11 @@ class OrderDetailView(DetailView):
     # Define content for serializers.py
     serializers_content = """
 from rest_framework import serializers
-from .models import ProductModel, OrderModel, UserProfileModel
+from .models import (
+                    ProductModel, 
+                    OrderModel, 
+                    UserProfileModel 
+                    )
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -485,8 +430,160 @@ class OrderViewSetTest(APITestCase):
                 assert 'class Meta:' in content, f"Missing Meta class in {file_name}"
                 # Check for proper model import
                 assert 'from ..models import' in content, f"Missing model import in {file_name}"
+                assert 'from .models import' not in content, f'Wrong import statement (.models) in {file_name}'
 
     # Verify original files are removed
     for file_name in files_content:
         original_file = app_path / file_name
         assert not original_file.exists(), f"Original {file_name} should be removed"
+
+def test_folderize_handles_imports_correctly(tmp_path):
+    """Test that folderize correctly updates imports when converting to folder structure."""
+    # Create a mock Django app with various files containing imports
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_models_file=True,
+        with_views_file=True,
+        with_serializers_file=True,
+        with_viewsets_file=True
+    )
+
+    # Define test content with various import styles and inline comments
+    models_content = """from django.db import models
+from django.utils import timezone
+
+class UserModel(models.Model):
+    name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(default=timezone.now)
+
+class ProfileModel(models.Model):  # User profile model
+    bio = models.TextField()
+    user = models.OneToOneField('UserModel', on_delete=models.CASCADE)
+"""
+
+    serializers_content = """from rest_framework import serializers
+from .models import UserModel, ProfileModel  # Import models
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserModel
+        fields = '__all__'
+
+class ProfileSerializer(serializers.ModelSerializer):  # Profile serializer
+    class Meta:
+        model = ProfileModel
+        fields = ['bio', 'user']
+"""
+
+    viewsets_content = """from rest_framework import viewsets
+from .models import UserModel
+from .serializers import UserSerializer
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = UserModel.objects.all()
+    serializer_class = UserSerializer
+"""
+
+    views_content = """from django.views import View
+from django.shortcuts import render
+from .models import UserModel, ProfileModel
+from .serializers import UserSerializer  # For API views
+
+class UserView(View):
+    def get(self, request):
+        users = UserModel.objects.all()
+        return render(request, 'users.html', {'users': users})
+"""
+
+    # Write content to files
+    (app_path / 'models.py').write_text(models_content)
+    (app_path / 'serializers.py').write_text(serializers_content)
+    (app_path / 'viewsets.py').write_text(viewsets_content)
+    (app_path / 'views.py').write_text(views_content)
+
+    # Run folderize command
+    runner = CliRunner()
+    os.chdir(tmp_path)
+    result = runner.invoke(folderize, obj={'app_name': 'testapp'})
+
+    # Print debug information
+    print("\nCommand output:")
+    print(result.output)
+    if result.exception:
+        import traceback
+        traceback.print_exception(type(result.exception), result.exception, result.exception.__traceback__)
+
+    # Verify command execution
+    assert result.exit_code == 0, f"Folderize command failed with exit code {result.exit_code}"
+
+    # Check that original files were removed
+    assert not (app_path / 'models.py').exists(), "models.py should be removed"
+    assert not (app_path / 'serializers.py').exists(), "serializers.py should be removed"
+    assert not (app_path / 'viewsets.py').exists(), "viewsets.py should be removed"
+    assert not (app_path / 'views.py').exists(), "views.py should be removed"
+
+    # Check that folders were created
+    assert (app_path / 'models').is_dir(), "models folder should be created"
+    assert (app_path / 'serializers').is_dir(), "serializers folder should be created"
+    assert (app_path / 'viewsets').is_dir(), "viewsets folder should be created"
+    assert (app_path / 'views').is_dir(), "views folder should be created"
+
+    # Check model files
+    user_model_file = app_path / 'models' / 'user_model.py'
+    profile_model_file = app_path / 'models' / 'profile_model.py'
+    
+    user_model_content = user_model_file.read_text()
+    profile_model_content = profile_model_file.read_text()
+    
+    # Verify Django imports are preserved
+    assert "from django.db import models" in user_model_content, "Django imports should be preserved in UserModel"
+    assert "from django.utils import timezone" in user_model_content, "Timezone import should be preserved in UserModel"
+    
+    # Verify comments are preserved
+    assert "# User profile model" in profile_model_content, "Comments should be preserved in ProfileModel"
+
+    # Check serializer files
+    user_serializer_file = app_path / 'serializers' / 'user_serializer.py'
+    profile_serializer_file = app_path / 'serializers' / 'profile_serializer.py'
+    user_serializer_content = user_serializer_file.read_text()
+    profile_serializer_content = profile_serializer_file.read_text()
+
+    # Verify serializer imports and comments
+    assert "from rest_framework import serializers" in user_serializer_content, "REST framework import should be preserved"
+    assert "from ..models import" in user_serializer_content and "UserModel" in user_serializer_content, "Model import should use parent directory"
+    assert "# Profile serializer" in profile_serializer_content, "Comments should be preserved in ProfileSerializer"
+    assert "from ..models import" in profile_serializer_content and "ProfileModel" in profile_serializer_content, "Model import should use parent directory"
+
+    # Check viewset files
+    user_viewset_file = app_path / 'viewsets' / 'user_viewset.py'
+    viewset_content = user_viewset_file.read_text()
+
+    # Verify viewset imports
+    assert "from rest_framework import viewsets" in viewset_content, "REST framework import should be preserved"
+    assert "from ..models import UserModel" in viewset_content, "Model import should use parent directory"
+    assert "from ..serializers import UserSerializer" in viewset_content, "Serializer import should use parent directory"
+
+    # Check view files
+    user_view_file = app_path / 'views' / 'user_view.py'
+    view_content = user_view_file.read_text()
+
+    # Verify view imports and comments
+    assert "from django.views import View" in view_content, "Django import should be preserved"
+    assert "from django.shortcuts import render" in view_content, "Django shortcuts import should be preserved"
+    assert "from ..models import" in view_content and "UserModel" in view_content, "Model import should use parent directory"
+    assert "from ..serializers import UserSerializer" in view_content, "Serializer import should use parent directory"
+    assert "# For API views" in view_content, "Comments should be preserved"
+
+    # Check __init__.py files
+    models_init = (app_path / 'models' / '__init__.py').read_text()
+    serializers_init = (app_path / 'serializers' / '__init__.py').read_text()
+    viewsets_init = (app_path / 'viewsets' / '__init__.py').read_text()
+    views_init = (app_path / 'views' / '__init__.py').read_text()
+
+    # Verify init imports
+    assert "from .user_model import UserModel" in models_init, "Model import should be in models/__init__.py"
+    assert "from .profile_model import ProfileModel" in models_init, "Profile model import should be in models/__init__.py"
+    assert "from .user_serializer import UserSerializer" in serializers_init, "Serializer import should be in serializers/__init__.py"
+    assert "from .user_viewset import UserViewSet" in viewsets_init, "ViewSet import should be in viewsets/__init__.py"
+    assert "from .user_view import UserView" in views_init, "View import should be in views/__init__.py"

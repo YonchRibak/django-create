@@ -321,3 +321,74 @@ def test_create_model_with_default_content(tmp_path):
     assert content.count("from django.db import models") == 1
     assert "class ExistingModel(models.Model):" in content
     assert f"class {third_model}(models.Model):" in content
+
+def test_create_model_with_default_content(tmp_path):
+    """Test creating a model in a file that only contains Django's default content."""
+    # Create a mock Django app
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_models_file=True,
+        with_models_folder=False
+    )
+
+    # Write Django's default content to models.py
+    models_py_path = app_path / 'models.py'
+    default_content = f"{Utils.DJANGO_IMPORTS['models']}\n\n{Utils.DEFAULT_COMMENTS['models']}\n"
+    models_py_path.write_text(default_content)
+
+    # Run the create_model command
+    runner = CliRunner()
+    os.chdir(tmp_path)
+    model_name = "TestModel"
+    result = runner.invoke(cli, ['testapp', 'create', 'model', model_name])
+
+    # Print debug information
+    print("\nInitial content:")
+    print(default_content)
+    print("\nCommand output:")
+    print(result.output)
+    print("\nFinal content:")
+    print(models_py_path.read_text())
+
+    # Verify command execution
+    assert result.exit_code == 0
+    assert f"Model '{model_name}' created successfully" in result.output
+
+    # Read the resulting content
+    content = models_py_path.read_text()
+
+    # Since it was default content, the file should be completely overwritten
+    assert content.count("from django.db import models") == 1
+    assert "# Create your models here" not in content
+    assert f"class {model_name}(models.Model):" in content
+
+    # Add another model to the file
+    second_model = "SecondModel"
+    result = runner.invoke(cli, ['testapp', 'create', 'model', second_model])
+
+    # Verify second model was added correctly
+    content = models_py_path.read_text()
+    print("\nContent after second model:")
+    print(content)
+
+    # Now it should use injection since file has actual content
+    assert content.count("from django.db import models") == 1  # Import still appears once
+    assert f"class {model_name}(models.Model):" in content
+    assert f"class {second_model}(models.Model):" in content
+
+    # Try creating a model in a file with non-default but no imports
+    non_default_content = "# Custom comment\n\nclass ExistingModel(models.Model):\n    pass\n"
+    models_py_path.write_text(non_default_content)
+
+    third_model = "ThirdModel"
+    result = runner.invoke(cli, ['testapp', 'create', 'model', third_model])
+
+    # Verify third model was added with imports
+    content = models_py_path.read_text()
+    print("\nContent after third model with initial non-default content:")
+    print(content)
+
+    assert content.count(Utils.DJANGO_IMPORTS['models']) == 1
+    assert "class ExistingModel(models.Model):" in content
+    assert f"class {third_model}(models.Model):" in content

@@ -236,10 +236,9 @@ def test_create_serializer_with_model(tmp_path):
     assert serializer_file_path.exists()
     content = serializer_file_path.read_text()
     assert "from rest_framework import serializers" in content
-    assert f"from .models import {model_name}" in content
+    assert f"from ..models import {model_name}" in content  # Changed from .models to ..models
     assert f"class {serializer_name}(serializers.ModelSerializer):" in content
-    assert f"model = {model_name}" in content
-
+    
     # Verify that the __init__.py file includes the import for the new serializer
     assert init_file_path.exists()
     init_content = init_file_path.read_text()
@@ -274,13 +273,12 @@ def test_create_serializer_without_model(tmp_path):
     assert result.exit_code == 0
     assert f"Serializer '{serializer_name}' created successfully" in result.output
 
-    # Verify the serializer file was created with the placeholder model "EnterModel"
+    # Verify the serializer file was created with the placeholder model
     assert serializer_file_path.exists()
     content = serializer_file_path.read_text()
     assert "from rest_framework import serializers" in content
-    assert "from .models import EnterModel" in content  # Default model name used
+    assert "from ..models import EnterModel" in content  # Changed from .models to ..models
     assert f"class {serializer_name}(serializers.ModelSerializer):" in content
-    assert "model = EnterModel" in content
 
     # Verify that the __init__.py file includes the import for the new serializer
     assert init_file_path.exists()

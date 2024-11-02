@@ -6,7 +6,6 @@ from pathlib import Path
 class Utils:
     DJANGO_IMPORTS = {
         'models': 'from django.db import models',
-        # Update views import to match template
         'views': 'from django.views import View',
         'serializers': 'from rest_framework import serializers',
         'viewsets': 'from rest_framework import viewsets',
@@ -24,17 +23,14 @@ class Utils:
     }
 
     @classmethod
-    def get_default_patterns(cls):
-        """Get default patterns dictionary constructed from imports and comments."""
-        return {
-            file_type: [cls.DJANGO_IMPORTS[file_type], cls.DEFAULT_COMMENTS[file_type]]
-            for file_type in cls.DJANGO_IMPORTS.keys()
-        }
-
-    @classmethod
     def is_default_content(cls, file_path, file_type):
         """
         Check if file only contains Django's default content.
+        More flexible implementation that:
+        1. Ignores whitespace variations
+        2. Allows for different orderings of the default elements
+        3. Ignores extra blank lines
+        4. Only checks if the non-empty lines match the expected content
         
         Args:
             file_path: Path to the file to check
@@ -43,19 +39,32 @@ class Utils:
         Returns:
             bool: True if file only contains default content
         """
+        # Read the file content
         with open(file_path, 'r') as f:
-            content = f.read().strip()
-        
-        # Get default patterns for this file type
-        default_patterns = cls.get_default_patterns().get(file_type, [])
-        
-        # Remove all whitespace for comparison
-        cleaned_content = ''.join(content.split())
-        
-        # Join default patterns without whitespace
-        default_content = ''.join(''.join(pattern.split()) for pattern in default_patterns)
-        
-        return cleaned_content == default_content
+            content = f.read()
+
+        # Get the expected elements for this file type
+        expected_import = cls.DJANGO_IMPORTS.get(file_type, '')
+        expected_comment = cls.DEFAULT_COMMENTS.get(file_type, '')
+
+        # Split content into non-empty lines and clean them
+        actual_lines = set(
+            line.strip() 
+            for line in content.split('\n') 
+            if line.strip()
+        )
+
+        # Create set of expected lines
+        expected_lines = set(
+            line.strip() 
+            for line in [expected_import, expected_comment] 
+            if line.strip()
+        )
+
+        # The file contains only default content if:
+        # 1. All non-empty lines in the file are expected lines
+        # 2. All expected lines are present in the file
+        return actual_lines == expected_lines
     
 def render_template(template_path, **kwargs):
     """
@@ -599,4 +608,122 @@ def process_imports(imports_string, source_file_path):
             processed_lines.append(' '.join(line.split()))
         i += 1
             
+    return '\n'.join(processed_lines)
+
+def determine_import_path(app_path, module_type, is_folderizing=False):
+    """
+    Determine the correct import path style based on app structure and command context.
+    Always prefer folder-level imports from sibling folders.
+    
+    Args:
+        app_path (Path): Path to the Django app
+        module_type (str): Type of module ('models', 'serializers', 'viewsets', etc.)
+        is_folderizing (bool): Whether this is being called during folderize command
+    
+    Returns:
+        tuple: (import_style, has_folder)
+            import_style: 'dot' for relative import (.models), 
+                         'dotdot' for parent relative import (..models),
+                         'direct' for direct import (models)
+            has_folder: Whether the module folder exists or will exist
+    """
+    if not module_type:
+        return "direct", False
+
+    # During folderize or for imports between folders, always use dotdot style
+    if is_folderizing or module_type in ['models', 'serializers', 'viewsets', 'views']:
+        return "dotdot", True
+
+    # For other cases (e.g., Django imports), use direct style
+    return "direct", False
+
+def format_import_statement(module_type, items, import_style='dot'):
+    """
+    Format an import statement based on the determined style.
+    Always formats as package-level imports for internal modules.
+    
+    Args:
+        module_type (str): The module to import from ('models', 'serializers', etc.)
+        items (str or list): Item(s) to import
+        import_style (str): 'dot', 'dotdot', or 'direct'
+    
+    Returns:
+        str: Formatted import statement
+    """
+    if items is None:
+        items = ['None']
+    elif isinstance(items, str):
+        items = [items]
+        
+    items_str = ', '.join(items)
+    
+    # If it's one of our module types, always import from the package
+    if module_type in ['models', 'serializers', 'viewsets', 'views']:
+        return f"from ..{module_type} import {items_str}"
+    
+    # For empty module type with dot/dotdot style
+    if not module_type:
+        if import_style == "dot":
+            return f"from . import {items_str}"
+        elif import_style == "dotdot":
+            return f"from .. import {items_str}"
+        
+    # For other imports (Django, etc.), use direct import
+    return f"from {module_type} import {items_str}"
+
+def update_template_imports(template_content, app_path, is_folderizing=False):
+    """
+    Update import statements in a template based on app structure.
+    Ensures all internal module imports are package-level.
+    
+    Args:
+        template_content (str): The template content to update
+        app_path (Path): Path to the Django app
+        is_folderizing (bool): Whether this is being called during folderize
+    
+    Returns:
+        str: Updated template content
+    """
+
+    if template_content is None:
+        return None
+
+    if not template_content.strip():
+        return template_content
+
+    # Simplified pattern that matches both direct and nested imports
+    base_pattern = r'from \.{1,2}(models|serializers|views|viewsets)(?:\.[a-zA-Z0-9_.]+)? import ([^#\n]+)(#.*)?$'
+    
+    # Split content into lines to preserve comments and formatting
+    lines = template_content.split('\n')
+    processed_lines = []
+
+    for line in lines:
+        match = re.match(base_pattern, line.strip())
+        if match:
+            module_type = match.group(1)  # The module type (models, serializers, etc.)
+            imports = match.group(2)  # The imported items
+            comment = match.group(3) or ''  # Any inline comment
+            
+            # Preserve the space before the comment if it exists
+            if comment and not comment.startswith(' '):
+                comment = ' ' + comment
+            
+            # Clean up the imports
+            items = [item.strip() for item in imports.split(',')]
+            
+            # Determine import style based on module type and context
+            import_style, _ = determine_import_path(app_path, module_type, is_folderizing)
+            
+            # Format the import statement using the determined style
+            new_import = format_import_statement(module_type, items, import_style)
+            
+            # Add back any comments
+            if comment:
+                new_import += comment
+                
+            processed_lines.append(new_import)
+        else:
+            processed_lines.append(line)
+
     return '\n'.join(processed_lines)

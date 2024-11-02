@@ -253,3 +253,74 @@ def test_create_view_with_default_content(tmp_path):
     assert content.count(Utils.DJANGO_IMPORTS['views']) == 1
     assert "class ExistingView(View):" in content
     assert f"class {third_view}(View):" in content
+
+def test_create_view_with_default_content(tmp_path):
+    """Test creating a view in a file that only contains Django's default content."""
+    # Create a mock Django app
+    app_path = create_mock_django_app(
+        tmp_path,
+        app_name='testapp',
+        with_views_file=True,
+        with_views_folder=False
+    )
+
+    # Write Django's default content to views.py
+    views_py_path = app_path / 'views.py'
+    default_content = f"{Utils.DJANGO_IMPORTS['views']}\n\n{Utils.DEFAULT_COMMENTS['views']}\n"
+    views_py_path.write_text(default_content)
+
+    # Run the create_view command
+    runner = CliRunner()
+    os.chdir(tmp_path)
+    view_name = "TestView"
+    result = runner.invoke(cli, ['testapp', 'create', 'view', view_name])
+
+    # Print debug information
+    print("\nInitial content:")
+    print(default_content)
+    print("\nCommand output:")
+    print(result.output)
+    print("\nFinal content:")
+    print(views_py_path.read_text())
+
+    # Verify command execution
+    assert result.exit_code == 0
+    assert f"View '{view_name}' created successfully" in result.output
+
+    # Read the resulting content
+    content = views_py_path.read_text()
+
+    # Since it was default content, the file should be completely overwritten
+    assert content.count(Utils.DJANGO_IMPORTS['views']) == 1
+    assert Utils.DEFAULT_COMMENTS['views'] not in content
+    assert f"class {view_name}(View):" in content
+
+    # Add another view to the file
+    second_view = "SecondView"
+    result = runner.invoke(cli, ['testapp', 'create', 'view', second_view])
+
+    # Verify second view was added correctly
+    content = views_py_path.read_text()
+    print("\nContent after second view:")
+    print(content)
+
+    # Now it should use injection since file has actual content
+    assert content.count(Utils.DJANGO_IMPORTS['views']) == 1  # Import still appears once
+    assert f"class {view_name}(View):" in content
+    assert f"class {second_view}(View):" in content
+
+    # Try creating a view in a file with non-default but no imports
+    non_default_content = "# Custom comment\n\nclass ExistingView(View):\n    pass\n"
+    views_py_path.write_text(non_default_content)
+
+    third_view = "ThirdView"
+    result = runner.invoke(cli, ['testapp', 'create', 'view', third_view])
+
+    # Verify third view was added with imports
+    content = views_py_path.read_text()
+    print("\nContent after third view with initial non-default content:")
+    print(content)
+
+    assert content.count(Utils.DJANGO_IMPORTS['views']) == 1
+    assert "class ExistingView(View):" in content
+    assert f"class {third_view}(View):" in content
