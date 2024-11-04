@@ -1,16 +1,7 @@
 import click
 from pathlib import Path
 import os
-from ..utils import (
-    Utils,
-    snake_case,
-    inject_element_into_file,
-    create_element_file,
-    add_import_to_file,
-    render_template,
-    is_import_in_file,
-    modify_import_statement_to_double_dot
-)
+from ..utils import Utils, snake_case
 
 @click.command(name='test')
 @click.argument('test_name')
@@ -53,66 +44,88 @@ def create_test(ctx, test_name, path):
     test_file_path = custom_test_path / test_file_name
     init_file_path = custom_test_path / '__init__.py'
 
-    # Handle class_dict case
+    # Handle class_dict case for folderize
     if class_dict:
         if tests_py_path.exists():
             imports = class_dict.get("imports", "")
-            if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
             test_content = class_dict.get(test_name, "")
-            full_content = imports + "\n\n" + test_content
-            inject_element_into_file(tests_py_path, full_content)
+            if imports:
+                content = Utils.process_template_imports(
+                    imports + "\n\n" + test_content,
+                    app_path
+                )
+            else:
+                content = test_content
+            Utils.write_or_append_content(tests_py_path, content, 'tests')
         else:
-            # Create tests folder if needed
+            # Create tests folder structure
             tests_folder_path.mkdir(parents=True, exist_ok=True)
-            
-            # Set up paths
             if path:
                 custom_test_path.mkdir(parents=True, exist_ok=True)
 
+            # Process content
             imports = class_dict.get("imports", "")
-            if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
             test_content = class_dict.get(test_name, "")
-            full_content = imports + "\n\n" + test_content
-            create_element_file(test_file_path, full_content)
-            add_import_to_file(init_file_path, test_name, test_file_name)
+            content = Utils.process_template_imports(
+                imports + "\n\n" + test_content,
+                app_path
+            )
+            
+            # Create files
+            Utils.write_or_append_content(test_file_path, content, 'tests')
+            init_content = f"from .{test_file_name[:-3]} import {test_name}"
+            Utils.write_or_append_content(init_file_path, init_content, 'init')
 
-        click.echo(f"test '{test_name}' created successfully in app '{app_name}'.")
+        click.echo(f"Test '{test_name}' created successfully in app '{app_name}'.")
         return 0
     
     # Template-based creation
     templates_path = Path(__file__).parent.parent / 'templates'
     test_template_path = templates_path / 'test_template.txt'
     test_template_no_import_path = templates_path / 'test_template_no_import.txt'
-    test_content = render_template(test_template_path, test_name=test_name)
-    test_content_no_import = render_template(test_template_no_import_path, test_name=test_name)
     
     if tests_py_path.exists() and not tests_folder_path.exists():
         if Utils.is_default_content(tests_py_path, 'tests'):
-            # If only default content exists, overwrite the file
-            with open(tests_py_path, 'w') as f:
-                f.write(test_content)
+            click.echo("tests.py contains default content!")
+            # Render full template with imports
+            content = Utils.render_template(
+                test_template_path,
+                app_path,
+                test_name=test_name
+            )
+            Utils.write_or_append_content(tests_py_path, content, 'tests')
         else:
-            # File has actual tests, check for import
-            if is_import_in_file(tests_py_path, Utils.DJANGO_IMPORTS['tests']):
-                inject_element_into_file(tests_py_path, test_content_no_import)
+            click.echo("tests.py DOES NOT contain default content!")
+            # Check if we need imports
+            if Utils.DJANGO_IMPORTS['tests'] in tests_py_path.read_text():
+                template_path = test_template_no_import_path
             else:
-                inject_element_into_file(tests_py_path, test_content)
+                template_path = test_template_path
+            
+            content = Utils.render_template(
+                template_path,
+                app_path,
+                test_name=test_name
+            )
+            Utils.write_or_append_content(tests_py_path, content, 'tests')
+            
     elif tests_folder_path.exists() and not tests_py_path.exists():
         # Ensure the custom path exists if provided
         if path:
             custom_test_path.mkdir(parents=True, exist_ok=True)
             
-        # Create the test file inside the specified or default folder
-        create_element_file(test_file_path, test_content)
+        # Create the test file with full template
+        content = Utils.render_template(
+            test_template_path,
+            app_path,
+            test_name=test_name
+        )
+        Utils.write_or_append_content(test_file_path, content, 'tests')
 
-        # Add import to __init__.py at the specified path
-        add_import_to_file(init_file_path, test_name, test_file_name)
+        # Add import to __init__.py
+        init_content = f"from .{test_file_name[:-3]} import {test_name}"
+        Utils.write_or_append_content(init_file_path, init_content, 'init')
+        
     elif tests_py_path.exists() and tests_folder_path.exists():
         raise click.ClickException(
             "Both 'tests.py' and 'tests/' folder exist. Please remove one before proceeding."
@@ -122,5 +135,5 @@ def create_test(ctx, test_name, path):
             "Neither 'tests.py' nor 'tests/' folder exists. Please create one before proceeding."
         )
 
-    click.echo(f"test '{test_name}' created successfully in app '{app_name}'.")
+    click.echo(f"Test '{test_name}' created successfully in app '{app_name}'.")
     return 0

@@ -1,16 +1,7 @@
 import click
 from pathlib import Path
 import os
-from ..utils import (
-    Utils,
-    snake_case,
-    inject_element_into_file,
-    create_element_file,
-    add_import_to_file,
-    render_template,
-    is_import_in_file,
-    modify_import_statement_to_double_dot
-)
+from ..utils import Utils, snake_case
 
 @click.command(name='view')
 @click.argument('view_name')
@@ -53,34 +44,37 @@ def create_view(ctx, view_name, path):
     view_file_path = custom_view_path / view_file_name
     init_file_path = custom_view_path / '__init__.py'
 
-    # Handle class_dict case
+    # Handle class_dict case for folderize
     if class_dict:
         if views_py_path.exists():
             imports = class_dict.get("imports", "")
-            if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
             view_content = class_dict.get(view_name, "")
-            full_content = imports + "\n\n" + view_content
-            inject_element_into_file(views_py_path, full_content)
+            if imports:
+                content = Utils.process_template_imports(
+                    imports + "\n\n" + view_content, 
+                    app_path
+                )
+            else:
+                content = view_content
+            Utils.write_or_append_content(views_py_path, content, 'views')
         else:
-            # Create views folder if needed
+            # Create views folder structure
             views_folder_path.mkdir(parents=True, exist_ok=True)
-            
-            # Set up paths
             if path:
                 custom_view_path.mkdir(parents=True, exist_ok=True)
 
+            # Process content
             imports = class_dict.get("imports", "")
-            if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
             view_content = class_dict.get(view_name, "")
-            full_content = imports + "\n\n" + view_content
-            create_element_file(view_file_path, full_content)
-            add_import_to_file(init_file_path, view_name, view_file_name)
+            content = Utils.process_template_imports(
+                imports + "\n\n" + view_content, 
+                app_path
+            )
+            
+            # Create files
+            Utils.write_or_append_content(view_file_path, content, 'views')
+            init_content = f"from .{view_file_name[:-3]} import {view_name}"
+            Utils.write_or_append_content(init_file_path, init_content, 'init')
 
         click.echo(f"View '{view_name}' created successfully in app '{app_name}'.")
         return 0
@@ -89,30 +83,47 @@ def create_view(ctx, view_name, path):
     templates_path = Path(__file__).parent.parent / 'templates'
     view_template_path = templates_path / 'view_template.txt'
     view_template_no_import_path = templates_path / 'view_template_no_import.txt'
-    view_content = render_template(view_template_path, view_name=view_name)
-    view_content_no_import = render_template(view_template_no_import_path, view_name=view_name)
     
     if views_py_path.exists() and not views_folder_path.exists():
         if Utils.is_default_content(views_py_path, 'views'):
-            # If only default content exists, overwrite the file
-            with open(views_py_path, 'w') as f:
-                f.write(view_content)
+            # Render full template with imports
+            content = Utils.render_template(
+                view_template_path, 
+                app_path, 
+                view_name=view_name
+            )
+            Utils.write_or_append_content(views_py_path, content, 'views')
         else:
-            # File has actual views, check for import
-            if is_import_in_file(views_py_path, Utils.DJANGO_IMPORTS['views']):
-                inject_element_into_file(views_py_path, view_content_no_import)
+            # Check if we need imports
+            if Utils.DJANGO_IMPORTS['views'] in views_py_path.read_text():
+                template_path = view_template_no_import_path
             else:
-                inject_element_into_file(views_py_path, view_content)
+                template_path = view_template_path
+            
+            content = Utils.render_template(
+                template_path, 
+                app_path, 
+                view_name=view_name
+            )
+            Utils.write_or_append_content(views_py_path, content, 'views')
+            
     elif views_folder_path.exists() and not views_py_path.exists():
         # Ensure the custom path exists if provided
         if path:
             custom_view_path.mkdir(parents=True, exist_ok=True)
             
-        # Create the view file inside the specified or default folder
-        create_element_file(view_file_path, view_content)
+        # Create the view file with full template
+        content = Utils.render_template(
+            view_template_path, 
+            app_path, 
+            view_name=view_name
+        )
+        Utils.write_or_append_content(view_file_path, content, 'views')
 
-        # Add import to __init__.py at the specified path
-        add_import_to_file(init_file_path, view_name, view_file_name)
+        # Add import to __init__.py
+        init_content = f"from .{view_file_name[:-3]} import {view_name}"
+        Utils.write_or_append_content(init_file_path, init_content, 'init')
+        
     elif views_py_path.exists() and views_folder_path.exists():
         raise click.ClickException(
             "Both 'views.py' and 'views/' folder exist. Please remove one before proceeding."

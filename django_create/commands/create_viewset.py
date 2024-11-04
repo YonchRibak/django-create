@@ -1,19 +1,7 @@
 import click
 from pathlib import Path
 import os
-from ..utils import (
-    snake_case,
-    inject_element_into_file,
-    create_element_file,
-    add_import_to_file,
-    add_import,
-    render_template,
-    modify_import_statement_to_double_dot,
-    merge_item_into_import,
-    update_template_imports,
-    Utils
-    
-)
+from ..utils import Utils, snake_case
 
 @click.command(name='viewset')
 @click.argument('viewset_name')
@@ -26,16 +14,15 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
     Create a new Django viewset in the specified app.
 
     Example:
-        django-create myapp create viewset SomeViewset --path products/some_other_folder --model Product --serializer ProductSerializer
+        django-create myapp create viewset SomeViewset --path products/some_other_folder --model Product
     """
     app_name = ctx.obj['app_name']
     class_dict = ctx.obj.get('class_dict', None)
 
-    # Use the current working directory as the base path
     base_path = Path(os.getcwd()).resolve()
     app_path = base_path / app_name
+    
     if not app_path.exists():
-        # If not, check in each subfolder of base_path
         possible_paths = [folder / app_name for folder in base_path.iterdir() if folder.is_dir()]
         app_path = next((p for p in possible_paths if p.exists()), None)
         
@@ -52,22 +39,26 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
             "Both 'viewsets.py' and 'viewsets/' folder exist. Please remove one before proceeding."
         )
     
-    # Handle class_dict case
+    # Handle class_dict case for folderize
     if class_dict:
         if viewsets_py_path.exists():
             imports = class_dict.get("imports", "")
-            if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
             viewset_content = class_dict.get(viewset_name, "")
-            full_content = imports + "\n\n" + viewset_content
-            inject_element_into_file(viewsets_py_path, full_content)
+            if not viewset_content:
+                click.echo(f"Error: No content found for viewset {viewset_name}")
+                return 1
+                
+            if imports:
+                content = Utils.process_template_imports(
+                    imports + "\n\n" + viewset_content,
+                    app_path
+                )
+            else:
+                content = viewset_content
+            Utils.write_or_append_content(viewsets_py_path, content, 'viewsets')
         else:
-            # Create viewsets folder if needed
+            # Create viewsets folder structure
             viewsets_folder_path.mkdir(parents=True, exist_ok=True)
-            
-            # Set up paths
             if path:
                 custom_viewset_path = viewsets_folder_path / Path(path)
                 custom_viewset_path.mkdir(parents=True, exist_ok=True)
@@ -79,14 +70,15 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
             init_file_path = custom_viewset_path / '__init__.py'
 
             imports = class_dict.get("imports", "")
-            if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
             viewset_content = class_dict.get(viewset_name, "")
-            full_content = imports + "\n\n" + viewset_content
-            create_element_file(viewset_file_path, full_content)
-            add_import_to_file(init_file_path, viewset_name, viewset_file_name)
+            content = Utils.process_template_imports(
+                imports + "\n\n" + viewset_content,
+                app_path
+            )
+            
+            Utils.write_or_append_content(viewset_file_path, content, 'viewsets')
+            init_content = f"from .{viewset_file_name[:-3]} import {viewset_name}"
+            Utils.write_or_append_content(init_file_path, init_content, 'init')
 
         click.echo(f"Viewset '{viewset_name}' created successfully in app '{app_name}'.")
         return 0
@@ -96,51 +88,32 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
     model_name = model or "EnterModel"
     serializer_name = serializer or "EnterSerializer"
 
-    if viewsets_py_path.exists() and not viewsets_folder_path.exists():
-        if Utils.is_default_content(viewsets_py_path, 'viewsets'):
-            # If only default content exists, overwrite the file
-            template = templates_path / 'viewset_template.txt'
-            content = render_template(template, viewset_name=viewset_name, serializer_name=serializer_name, model_name=model_name)
-            content = update_template_imports(content, app_path)
-            with open(viewsets_py_path, 'w') as f:
-                f.write(content)
-        else:
-            if model:
-                model_import_line = f"from ..models import {model}"
-                with open(viewsets_py_path, 'r') as f:
-                    lines = f.readlines()
-                for i, line in enumerate(lines):
-                    if line.startswith('from ..models') or line.startswith('from .models'):
-                        if model not in line:
-                            merged_line = merge_item_into_import(line, model, 'from ..models')
-                            lines[i] = merged_line
-                            with open(viewsets_py_path, 'w') as f:
-                                f.writelines(lines)
-                    else: 
-                        add_import(viewsets_py_path, model_import_line)
+    # Determine import style based on existing content or folder structure
+    import_style = '..'
+    if viewsets_py_path.exists():
+        content = viewsets_py_path.read_text()
+        if 'from .models import' in content:
+            import_style = '.'
+        elif 'from ..models import' in content:
+            import_style = '..'
+    elif not viewsets_folder_path.exists() and not path:
+        import_style = '.'
 
-            if serializer:
-                serializer_import_line = f"from ..serializers import {serializer}"
-                with open(viewsets_py_path, 'r') as f:
-                    lines = f.readlines()
-        
-                for i, line in enumerate(lines):
-                    if line.startswith('from ..serializers') or line.startswith('from .serializers'):
-                        if serializer not in line:
-                            merged_line = merge_item_into_import(line, serializer, 'from ..serializers')
-                            lines[i] = merged_line
-                            with open(viewsets_py_path, 'w') as f:
-                                f.writelines(lines)
-                    else:    
-                        add_import(viewsets_py_path, serializer_import_line) 
-            
-             # Render and inject the serializer content without imports
-            template_no_import = templates_path / 'viewset_template_no_import.txt'
-            content = render_template(template_no_import, viewset_name=viewset_name, serializer_name=serializer_name, model_name=model_name)
-            content = update_template_imports(content, app_path)
-            inject_element_into_file(viewsets_py_path, content)
-        
-    elif viewsets_folder_path.exists() and not viewsets_py_path.exists():
+    # Prepare content based on import style
+    template = templates_path / 'viewset_template.txt'
+    content = Utils.render_template(
+        template,
+        app_path,
+        viewset_name=viewset_name,
+        model_name=model_name,
+        serializer_name=serializer_name
+    )
+    content = content.replace('from .models', f'from {import_style}models')
+    content = content.replace('from .serializers', f'from {import_style}serializers')
+
+    if viewsets_py_path.exists() and not viewsets_folder_path.exists():
+        Utils.write_or_append_content(viewsets_py_path, content, 'viewsets')
+    elif viewsets_folder_path.exists() or path:
         # Ensure the custom path exists if provided
         if path:
             custom_viewset_path = viewsets_folder_path / Path(path)
@@ -148,23 +121,18 @@ def create_viewset(ctx, viewset_name, path, model, serializer):
         else:
             custom_viewset_path = viewsets_folder_path
 
-        viewset_file_name = f'{snake_case(viewset_name)}.py'
+        viewset_file_name = f"{snake_case(viewset_name)}.py"
         viewset_file_path = custom_viewset_path / viewset_file_name
         init_file_path = custom_viewset_path / '__init__.py'
 
-        # Create the serializer file with full template
-        template = templates_path / 'viewset_template.txt'
-        content = render_template(template, viewset_name=viewset_name,serializer_name=serializer_name, model_name=model_name)
-        content = update_template_imports(content, app_path)
-        create_element_file(viewset_file_path, content)
-        add_import_to_file(init_file_path, viewset_name, viewset_file_name)
-    else: 
-        # Neither exists, create viewsets.py by default
-        template = templates_path / 'viewset_template.txt'
-        content = render_template(template, viewset_name=viewset_name, serializer_name=serializer_name, model_name=model_name)
-        content = update_template_imports(content, app_path)
-        with open(viewsets_py_path, 'w') as f:
-            f.write(content)
+        # Create the viewset file
+        Utils.write_or_append_content(viewset_file_path, content, 'viewsets')
+
+        # Add import to __init__.py
+        init_content = f"from .{viewset_file_name[:-3]} import {viewset_name}"
+        Utils.write_or_append_content(init_file_path, init_content, 'init')
+    else:
+        Utils.write_or_append_content(viewsets_py_path, content, 'viewsets')
 
     click.echo(f"Viewset '{viewset_name}' created successfully in app '{app_name}'.")
     return 0

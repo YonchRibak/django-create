@@ -34,6 +34,10 @@ def test_inject_into_tests_py(tmp_path):
     # Verify that the test was injected into tests.py
     assert result.exit_code == 0
     assert f"class {test_name}(TestCase):" in tests_py_path.read_text()
+    assert "from rest_framework.test import APIClient" in tests_py_path.read_text()
+    assert "from rest_framework import status" in tests_py_path.read_text()
+    assert "from django.urls import reverse" in tests_py_path.read_text()
+
 
 
 def test_create_in_tests_folder(tmp_path):
@@ -176,7 +180,7 @@ def test_inject_test_without_duplicate_import(tmp_path):
 
     # Verify that the command executed successfully
     assert result.exit_code == 0
-    assert "test 'TestTestWithoutImport' created successfully" in result.output
+    assert "Test 'TestTestWithoutImport' created successfully" in result.output
 
     # Check the contents of tests.py to confirm no duplicate import was added
     content = tests_py_path.read_text()
@@ -284,7 +288,7 @@ def test_create_test_with_default_content(tmp_path):
 
     # Verify command execution
     assert result.exit_code == 0
-    assert f"test '{test_name}' created successfully" in result.output
+    assert f"Test '{test_name}' created successfully" in result.output
 
     # Read the resulting content
     content = tests_py_path.read_text()

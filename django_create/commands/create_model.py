@@ -1,16 +1,8 @@
 import click
 from pathlib import Path
 import os
-from ..utils import (
-    Utils,
-    snake_case,
-    inject_element_into_file,
-    create_element_file,
-    add_import_to_file,
-    render_template,
-    is_import_in_file,
-    process_imports
-)
+from ..utils import Utils, snake_case
+
 @click.command(name='model')
 @click.argument('model_name')
 @click.option('--path', default=None, help="Subdirectory path inside the models folder.")
@@ -52,32 +44,37 @@ def create_model(ctx, model_name, path):
     model_file_path = custom_model_path / model_file_name
     init_file_path = custom_model_path / '__init__.py'
 
-    # Handle class_dict case
+    # Handle class_dict case for folderize
     if class_dict:
         if models_py_path.exists():
             imports = class_dict.get("imports", "")
-            if imports:
-                # Process imports relative to models.py
-                imports = process_imports(imports, models_py_path)
             model_content = class_dict.get(model_name, "")
-            full_content = imports + "\n\n" + model_content
-            inject_element_into_file(models_py_path, full_content)
+            if imports:
+                content = Utils.process_template_imports(
+                    imports + "\n\n" + model_content, 
+                    app_path
+                )
+            else:
+                content = model_content
+            Utils.write_or_append_content(models_py_path, content, 'models')
         else:
-            # Create models folder if needed
+            # Create models folder structure
             models_folder_path.mkdir(parents=True, exist_ok=True)
-            
-            # Set up paths
             if path:
                 custom_model_path.mkdir(parents=True, exist_ok=True)
 
+            # Process content
             imports = class_dict.get("imports", "")
-            if imports:
-                # Process imports relative to the new model file
-                imports = process_imports(imports, model_file_path)
             model_content = class_dict.get(model_name, "")
-            full_content = imports + "\n\n" + model_content
-            create_element_file(model_file_path, full_content)
-            add_import_to_file(init_file_path, model_name, model_file_name)
+            content = Utils.process_template_imports(
+                imports + "\n\n" + model_content, 
+                app_path
+            )
+            
+            # Create files
+            Utils.write_or_append_content(model_file_path, content, 'models')
+            init_content = f"from .{model_file_name[:-3]} import {model_name}"
+            Utils.write_or_append_content(init_file_path, init_content, 'init')
 
         click.echo(f"Model '{model_name}' created successfully in app '{app_name}'.")
         return 0
@@ -86,30 +83,47 @@ def create_model(ctx, model_name, path):
     templates_path = Path(__file__).parent.parent / 'templates'
     model_template_path = templates_path / 'model_template.txt'
     model_template_no_import_path = templates_path / 'model_template_no_import.txt'
-    model_content = render_template(model_template_path, model_name=model_name)
-    model_content_no_import = render_template(model_template_no_import_path, model_name=model_name)
     
     if models_py_path.exists() and not models_folder_path.exists():
         if Utils.is_default_content(models_py_path, 'models'):
-            # If only default content exists, overwrite the file
-            with open(models_py_path, 'w') as f:
-                f.write(model_content)
+            # Render full template with imports
+            content = Utils.render_template(
+                model_template_path, 
+                app_path, 
+                model_name=model_name
+            )
+            Utils.write_or_append_content(models_py_path, content, 'models')
         else:
-            # File has actual models, check for import
-            if is_import_in_file(models_py_path, Utils.DJANGO_IMPORTS['models']):
-                inject_element_into_file(models_py_path, model_content_no_import)
+            # Check if we need imports
+            if Utils.DJANGO_IMPORTS['models'] in models_py_path.read_text():
+                template_path = model_template_no_import_path
             else:
-                inject_element_into_file(models_py_path, model_content)
+                template_path = model_template_path
+            
+            content = Utils.render_template(
+                template_path, 
+                app_path, 
+                model_name=model_name
+            )
+            Utils.write_or_append_content(models_py_path, content, 'models')
+            
     elif models_folder_path.exists() and not models_py_path.exists():
         # Ensure the custom path exists if provided
         if path:
             custom_model_path.mkdir(parents=True, exist_ok=True)
             
-        # Create the model file inside the specified or default folder
-        create_element_file(model_file_path, model_content)
+        # Create the model file with full template
+        content = Utils.render_template(
+            model_template_path, 
+            app_path, 
+            model_name=model_name
+        )
+        Utils.write_or_append_content(model_file_path, content, 'models')
 
-        # Add import to __init__.py at the specified path
-        add_import_to_file(init_file_path, model_name, model_file_name)
+        # Add import to __init__.py
+        init_content = f"from .{model_file_name[:-3]} import {model_name}"
+        Utils.write_or_append_content(init_file_path, init_content, 'init')
+        
     elif models_py_path.exists() and models_folder_path.exists():
         raise click.ClickException(
             "Both 'models.py' and 'models/' folder exist. Please remove one before proceeding."

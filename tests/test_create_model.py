@@ -4,7 +4,7 @@ from click.testing import CliRunner
 from pathlib import Path
 from django_create.utils import create_mock_django_app, snake_case, Utils
 from django_create.cli import cli  # Import the main CLI entry point
-from django_create.commands import folderize
+
 
 def test_inject_into_models_py(tmp_path):
     # Create a mock Django app with models.py

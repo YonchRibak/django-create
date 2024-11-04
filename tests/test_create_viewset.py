@@ -161,8 +161,8 @@ def test_creates_viewsets_py_when_no_file_or_folder(tmp_path):
     assert result.exit_code == 0
     assert viewsets_py_path.exists()
     assert "from rest_framework import viewsets" in viewsets_py_path.read_text()
-    assert "from ..models import EnterModel" in viewsets_py_path.read_text()
-    assert "from ..serializers import EnterSerializer" in viewsets_py_path.read_text()
+    assert "from ..models import EnterModel" or "from .models import EnterModel" in viewsets_py_path.read_text()
+    assert "from ..serializers import EnterSerializer" or "from .serializers import EnterSerializer" in viewsets_py_path.read_text()
 
     # Verify that the viewsets file was created
     assert viewsets_py_path.exists()

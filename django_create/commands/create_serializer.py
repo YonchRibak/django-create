@@ -1,18 +1,7 @@
 import click
 from pathlib import Path
 import os
-from ..utils import (
-    Utils,
-    snake_case,
-    inject_element_into_file,
-    create_element_file,
-    add_import_to_file,
-    add_import,
-    render_template,
-    update_template_imports,
-    modify_import_statement_to_double_dot,
-    merge_item_into_import
-    )
+from ..utils import Utils, snake_case
 
 @click.command(name='serializer')
 @click.argument('serializer_name')
@@ -49,26 +38,27 @@ def create_serializer(ctx, serializer_name, path, model):
         raise click.ClickException(
             "Both 'serializers.py' and 'serializers/' folder exist. Please remove one before proceeding."
         )
-    
-    # Handle class_dict case for folderize command
+
+    # Handle class_dict case for folderize
     if class_dict:
+        serializer_content = class_dict.get(serializer_name, "")
+        if not serializer_content:
+            click.echo(f"Error: No content found for serializer {serializer_name}")
+            return 1
+            
         if serializers_py_path.exists():
             imports = class_dict.get("imports", "")
             if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
-            serializer_content = class_dict.get(serializer_name, "")
-            if not serializer_content:
-                click.echo(f"Error: No content found for serializer {serializer_name}")
-                return 1
-            full_content = imports + "\n\n" + serializer_content
-            inject_element_into_file(serializers_py_path, full_content)
+                content = Utils.process_template_imports(
+                    imports + "\n\n" + serializer_content,
+                    app_path
+                )
+            else:
+                content = serializer_content
+            Utils.write_or_append_content(serializers_py_path, content, 'serializers')
         else:
-            # Create serializers folder if needed
+            # Create serializers folder structure
             serializers_folder_path.mkdir(parents=True, exist_ok=True)
-            
-            # Set up paths
             if path:
                 custom_serializer_path = serializers_folder_path / Path(path)
                 custom_serializer_path.mkdir(parents=True, exist_ok=True)
@@ -79,55 +69,75 @@ def create_serializer(ctx, serializer_name, path, model):
             serializer_file_path = custom_serializer_path / serializer_file_name
             init_file_path = custom_serializer_path / '__init__.py'
 
+            # Process content
             imports = class_dict.get("imports", "")
-            if imports:
-                import_lines = imports.split('\n')
-                modified_import_lines = [modify_import_statement_to_double_dot(line) for line in import_lines]
-                imports = '\n'.join(modified_import_lines)
-            serializer_content = class_dict.get(serializer_name, "")
-            if not serializer_content:
-                click.echo(f"Error: No content found for serializer {serializer_name}")
-                return 1
-            full_content = imports + "\n\n" + serializer_content
-            create_element_file(serializer_file_path, full_content)
-            add_import_to_file(init_file_path, serializer_name, serializer_file_name)
+            content = Utils.process_template_imports(
+                imports + "\n\n" + serializer_content,
+                app_path
+            )
+            
+            # Create files
+            Utils.write_or_append_content(serializer_file_path, content, 'serializers')
+            init_content = f"from .{serializer_file_name[:-3]} import {serializer_name}"
+            Utils.write_or_append_content(init_file_path, init_content, 'init')
 
         click.echo(f"Serializer '{serializer_name}' created successfully in app '{app_name}'.")
         return 0
-    
+
     # Template-based creation
     templates_path = Path(__file__).parent.parent / 'templates'
     model_name = model or "EnterModel"
-    
+
     if serializers_py_path.exists() and not serializers_folder_path.exists():
         if Utils.is_default_content(serializers_py_path, 'serializers'):
             # If only default content exists, overwrite the file
             template = templates_path / 'serializer_template.txt'
-            content = render_template(template, serializer_name=serializer_name, model_name=model_name)
-            content = update_template_imports(content, app_path)
-            with open(serializers_py_path, 'w') as f:
-                f.write(content)
+            content = Utils.render_template(
+                template,
+                app_path,
+                serializer_name=serializer_name,
+                model_name=model_name
+            )
+            Utils.write_or_append_content(serializers_py_path, content, 'serializers')
         else:
+            # Add serializer content
+            template = templates_path / 'serializer_template_no_import.txt'
+            serializer_content = Utils.render_template(
+                template,
+                app_path,
+                serializer_name=serializer_name,
+                model_name=model_name
+            )
             
-            model_import_line = f"from ..models import {model_name}"
-            with open(serializers_py_path, 'r') as f:
-                lines = f.readlines()
-            for i, line in enumerate(lines):
-                if line.startswith(('from ..models','from .models')):
-                    if model not in line:
-                        merged_line = merge_item_into_import(line, model_name, "from ..models" if line.startswith("from ..models") else "from .models")
-                        lines[i] = merged_line
-                        with open(serializers_py_path, 'w') as f:
-                            f.writelines(lines)
-                        
-                else: 
-                    add_import(serializers_py_path, model_import_line)
+            # Check existing content
+            current_content = serializers_py_path.read_text()
             
-            # Render and inject the serializer content without imports
-            template_no_import = templates_path / 'serializer_template_no_import.txt'
-            content = render_template(template_no_import, serializer_name=serializer_name, model_name=model_name)
-            content = update_template_imports(content, app_path)
-            inject_element_into_file(serializers_py_path, content)
+            # Prepare imports
+            imports = ["from rest_framework import serializers"]
+            
+            # Handle model imports by consolidating them
+            current_models = []
+            import_prefix = None
+            lines = current_content.split('\n')
+            for line in lines:
+                if line.startswith(('from .models import', 'from ..models import')):
+                    import_prefix = line.split('import')[0].strip()
+                    current_models.extend(model.strip() for model in line.split('import')[1].strip().split(', '))
+            
+            if current_models:
+                # Add new model to existing models if needed
+                if model_name not in current_models:
+                    current_models.append(model_name)
+                import_prefix = import_prefix or 'from .models'
+                models_import = f"{import_prefix} import {', '.join(sorted(set(current_models)))}"
+                imports.append(models_import)
+            else:
+                # No existing models import
+                imports.append(f"from .models import {model_name}")
+            
+            # Combine imports and content
+            content = '\n'.join(imports) + '\n\n' + serializer_content
+            Utils.write_or_append_content(serializers_py_path, content, 'serializers')
 
     elif serializers_folder_path.exists() and not serializers_py_path.exists():
         # Ensure the custom path exists if provided
@@ -143,17 +153,29 @@ def create_serializer(ctx, serializer_name, path, model):
 
         # Create the serializer file with full template
         template = templates_path / 'serializer_template.txt'
-        content = render_template(template, serializer_name=serializer_name, model_name=model_name)
-        content = update_template_imports(content, app_path)
-        create_element_file(serializer_file_path, content)
-        add_import_to_file(init_file_path, serializer_name, serializer_file_name)
+        content = Utils.render_template(
+            template,
+            app_path,
+            serializer_name=serializer_name,
+            model_name=model_name
+        )
+        # For folder structure, we want double-dot imports
+        content = content.replace("from .models", "from ..models")
+        Utils.write_or_append_content(serializer_file_path, content, 'serializers')
+        
+        # Add import to __init__.py
+        init_content = f"from .{serializer_file_name[:-3]} import {serializer_name}"
+        Utils.write_or_append_content(init_file_path, init_content, 'init')
     else:
         # Neither exists, create serializers.py by default
         template = templates_path / 'serializer_template.txt'
-        content = render_template(template, serializer_name=serializer_name, model_name=model_name)
-        content = update_template_imports(content, app_path)
-        with open(serializers_py_path, 'w') as f:
-            f.write(content)
+        content = Utils.render_template(
+            template,
+            app_path,
+            serializer_name=serializer_name,
+            model_name=model_name
+        )
+        Utils.write_or_append_content(serializers_py_path, content, 'serializers')
 
     click.echo(f"Serializer '{serializer_name}' created successfully in app '{app_name}'.")
     return 0
