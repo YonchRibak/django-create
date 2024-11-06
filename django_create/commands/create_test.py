@@ -86,7 +86,7 @@ def create_test(ctx, test_name, path):
     
     if tests_py_path.exists() and not tests_folder_path.exists():
         if Utils.is_default_content(tests_py_path, 'tests'):
-            click.echo("tests.py contains default content!")
+          
             # Render full template with imports
             content = Utils.render_template(
                 test_template_path,
@@ -95,7 +95,7 @@ def create_test(ctx, test_name, path):
             )
             Utils.write_or_append_content(tests_py_path, content, 'tests')
         else:
-            click.echo("tests.py DOES NOT contain default content!")
+          
             # Check if we need imports
             if Utils.DJANGO_IMPORTS['tests'] in tests_py_path.read_text():
                 template_path = test_template_no_import_path
