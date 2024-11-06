@@ -27,28 +27,40 @@ class Utils:
     @classmethod
     def is_default_content(cls, file_path, file_type):
         """
-        Check if file only contains Django's default content.
-        Handles variations in whitespace and ordering.
+        Check if file only contains imports and comments.
+        Any other content indicates non-default content.
         
         Args:
             file_path: Path to the file to check
             file_type: Type of file ('models', 'views', etc.)
             
         Returns:
-            bool: True if file only contains default content
+            bool: True if file only contains imports and comments
         """
         try:
             with open(file_path, 'r') as f:
-                content = f.read()
+                lines = f.readlines()
 
-            content = '\n'.join(line.strip() for line in content.splitlines() if line.strip())
-            # Get the expected elements
-            expected_import = cls.DJANGO_IMPORTS.get(file_type, '')
-            expected_comment = cls.DEFAULT_COMMENTS.get(file_type, '')
-
-            expected_content = '\n'.join([expected_import, expected_comment])
-
-            return content == expected_content
+            # Process each line
+            for line in lines:
+                line = line.strip()
+                if not line:  # Skip empty lines
+                    continue
+                    
+                # Skip if line is a comment
+                if line.startswith('#'):
+                    continue
+                    
+                # Skip if line is an import
+                if line.startswith(('from ', 'import ')):
+                    continue
+                    
+                # If we get here, we found non-default content
+                return False
+                
+            # If we get here, we only found imports, comments, or empty lines
+            return True
+            
         except Exception:
             return False
 
@@ -159,8 +171,26 @@ class Utils:
     @classmethod
     def write_or_append_content(cls, file_path, content, content_type):
         """Write content to a file, either overwriting or appending based on current content."""
+        file_path = Path(file_path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Special handling for __init__.py files - always append
+        if file_path.name == '__init__.py':
+            if not file_path.exists():
+                file_path.write_text(content + '\n')
+                return
+                
+            current_content = file_path.read_text()
+            if content not in current_content:  # Avoid duplicate imports
+                if current_content and not current_content.endswith('\n'):
+                    current_content += '\n'
+                if content and not content.endswith('\n'):
+                    content += '\n'
+                file_path.write_text(current_content + content)
+            return
+
+        # Normal handling for other files
         if not file_path.exists():
-            file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content)
             return
 
@@ -168,88 +198,90 @@ class Utils:
             file_path.write_text(content)
             return
 
+        # Handle imports merging for non-init files
         current_content = file_path.read_text()
         
-        # Handle imports merging
-        current_imports = {}  # Dictionary to store imports by module path
+        # Parse imports into a dictionary by import path
+        current_imports = {}
         current_body = []
         new_imports = {}
         new_body = []
         
         # Split current content into imports and body
         in_imports = True
-        for line in current_content.split('\n'):
-            if line.strip() and not line.strip().startswith('#'):
-                if line.startswith(('from ', 'import ')):
-                    if line.startswith('from '):
-                        module_path = line.split(' import ')[0]
-                        imports = [i.strip() for i in line.split(' import ')[1].split(',')]
-                        if module_path in current_imports:
-                            current_imports[module_path].extend(imports)
-                        else:
-                            current_imports[module_path] = imports
-                    else:
-                        current_imports[line] = []
-                else:
-                    in_imports = False
+        for line in current_content.splitlines():
+            if not line.strip() or line.strip().startswith('#'):
+                if not in_imports:
                     current_body.append(line)
-            elif not in_imports:
-                current_body.append(line)
+                continue
                 
-        # Split new content into imports and body
-        in_imports = True
-        for line in content.split('\n'):
-            if line.strip() and not line.strip().startswith('#'):
-                if line.startswith(('from ', 'import ')):
-                    if line.startswith('from '):
-                        module_path = line.split(' import ')[0]
-                        imports = [i.strip() for i in line.split(' import ')[1].split(',')]
-                        if module_path in new_imports:
-                            new_imports[module_path].extend(imports)
-                        else:
-                            new_imports[module_path] = imports
+            if line.startswith(('from ', 'import ')):
+                if line.startswith('from '):
+                    module_path = line.split(' import ')[0]
+                    imports = {i.strip() for i in line.split(' import ')[1].split(',')}
+                    if module_path in current_imports:
+                        current_imports[module_path].update(imports)
                     else:
-                        new_imports[line] = []
+                        current_imports[module_path] = imports
                 else:
-                    in_imports = False
+                    current_imports[line] = set()
+            else:
+                in_imports = False
+                current_body.append(line)
+
+        # Parse new content's imports
+        in_imports = True
+        for line in content.splitlines():
+            if not line.strip() or line.strip().startswith('#'):
+                if not in_imports:
                     new_body.append(line)
-            elif not in_imports:
+                continue
+                
+            if line.startswith(('from ', 'import ')):
+                if line.startswith('from '):
+                    module_path = line.split(' import ')[0]
+                    imports = {i.strip() for i in line.split(' import ')[1].split(',')}
+                    if module_path in new_imports:
+                        new_imports[module_path].update(imports)
+                    else:
+                        new_imports[module_path] = imports
+                else:
+                    new_imports[line] = set()
+            else:
+                in_imports = False
                 new_body.append(line)
 
         # Merge imports
-        all_imports = {}
-        for module_path, imports in current_imports.items():
-            if module_path not in all_imports:
-                all_imports[module_path] = set(imports)
-            else:
-                all_imports[module_path].update(imports)
-                
+        all_imports = current_imports.copy()
         for module_path, imports in new_imports.items():
-            if module_path not in all_imports:
-                all_imports[module_path] = set(imports)
-            else:
+            if module_path in all_imports:
                 all_imports[module_path].update(imports)
+            else:
+                all_imports[module_path] = imports
 
-        # Generate final import statements
-        import_statements = []
+        # Generate combined import statements
+        import_lines = []
         for module_path, imports in sorted(all_imports.items()):
             if imports:
-                import_statements.append(f"{module_path} import {', '.join(sorted(imports))}")
+                items = sorted(imports)
+                import_lines.append(f"{module_path} import {', '.join(items)}")
             else:
-                import_statements.append(module_path)
+                import_lines.append(module_path)
 
-        # Combine content
-        final_content = '\n'.join(import_statements)
-        if final_content and current_body:
+        # Combine everything
+        final_content = '\n'.join(import_lines)
+        if final_content and (current_body or new_body):
             final_content += '\n\n'
-        final_content += '\n'.join(current_body)
-        if final_content and new_body:
+        if current_body:
+            final_content += '\n'.join(current_body)
+        if current_body and new_body:
             final_content += '\n\n'
-        final_content += '\n'.join(new_body)
-
+        if new_body:
+            final_content += '\n'.join(new_body)
+        if not final_content.endswith('\n'):
+            final_content += '\n'
+        
         file_path.write_text(final_content)
-    
-
 def snake_case(text):
     """
     Convert text to snake_case, handling special cases.

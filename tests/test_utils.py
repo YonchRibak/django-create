@@ -30,7 +30,7 @@ def test_is_default_content(tmp_path):
         (
             'models',
             "",
-            False
+            True
         ),
         # Default content for views
         (

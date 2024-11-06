@@ -162,7 +162,7 @@ def test_inject_view_without_duplicate_import(tmp_path):
     
     # Ensure views.py exists and contains the import
     views_py_path = app_path / 'views.py'
-    views_py_path.write_text("from django.db import View\n\n# Existing views\n")
+    views_py_path.write_text("from django.db import View\n\nclass SomeView(View):\n")
 
     runner = CliRunner()
     view_name = "TestViewWithoutImport"
